@@ -1,0 +1,77 @@
+# ---------------------------------------------------------------------------
+# Data — never commit the corpus
+# ---------------------------------------------------------------------------
+CUAD_v1/
+*.zip
+data/raw/
+
+# The results database. It is the project's most valuable artifact, but it is
+# generated, it churns on every run, and SQLite files diff horribly.
+# Export the final numbers to CSV/JSON in reports/ and commit those instead.
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Vector index — regenerate from the corpus, don't store
+index/
+*.faiss
+*.index
+*.ann
+
+# ---------------------------------------------------------------------------
+# Secrets — the Gemini key lives here. Committing this once is permanent.
+# Commit a .env.example with empty values so the quickstart is reproducible.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.key
+credentials.json
+service-account*.json
+.streamlit/secrets.toml
+
+# ---------------------------------------------------------------------------
+# Trained models
+# Ignored by default because they're regenerable. Before shipping, consider
+# force-adding the FINAL classifier (git add -f) — a committed model is what
+# lets a stranger run the quickstart without retraining.
+# ---------------------------------------------------------------------------
+*.pkl
+*.joblib
+models/
+
+# ---------------------------------------------------------------------------
+# Python
+# ---------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.python-version
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ---------------------------------------------------------------------------
+# Scratch — keep experiments out of the history
+# ---------------------------------------------------------------------------
+scratch/
+tmp/
+*.log
+
+# ---------------------------------------------------------------------------
+# OS / editor
+# ---------------------------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+*.swp
