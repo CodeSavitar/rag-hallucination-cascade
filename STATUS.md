@@ -3,7 +3,7 @@
 Single source of truth for where the project actually is. Updated at the end of every
 work session. Read this first when resuming after a gap.
 
-**Last updated:** 2026-09-12
+**Last updated:** 2026-09-29
 **Current milestone:** M1 — target pipeline + logging
 **Total est. effort:** ~55 h across M1–M6
 
@@ -54,13 +54,13 @@ sanity queries return sensible results.
 | Regression harness | Absorbed into this project as optional diff mode, post-M6 | 2026-09-12 |
 | Schema shape | One denormalised `query_log` table, layer columns pre-declared | 2026-09-12 |
 | Text structure | CUAD txt has no paragraph breaks → window-based chunking | 2026-09-12 |
+| Generator model (target pipeline) | Local Mistral 7B via Ollama; judge stays Gemini so they differ | 2026-09-29 |
 
 ## Decisions still open
 
 | Question | Needed by | Notes |
 |---|---|---|
 | Chunk size / overlap | T5 | Pick one, log it as `pipeline_config_id`; do not compare strategies |
-| Generator model for the target pipeline | T6 | Gemini or local Mistral — whichever runs faster locally |
 | Judge model + prompt version | M3 | Gemini primary; version the prompt from the first call |
 | Which 41 clause types become natural questions | M2 | Favour contracts with high answerable coverage |
 
