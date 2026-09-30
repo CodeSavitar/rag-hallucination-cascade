@@ -3,7 +3,7 @@
 Single source of truth for where the project actually is. Updated at the end of every
 work session. Read this first when resuming after a gap.
 
-**Last updated:** 2026-09-29
+**Last updated:** 2026-09-30
 **Current milestone:** M1 — target pipeline + logging
 **Total est. effort:** ~55 h across M1–M6
 
@@ -30,8 +30,8 @@ Tasks are sized to finish inside one sitting. Never stop mid-task — stop betwe
 |---|---|---|
 | T1 · Results table (`schema.sql`) | 1 h | **done** — 69 cols, validated |
 | T2 · Acquire CUAD corpus | 0.5 h | **done** — `CUAD_v1/`, 510 contracts |
-| T3 · Repo scaffold + `.gitignore` + venv + deps | 0.5 h | todo |
-| T4 · Select 20–30 contracts (size 16–65 KB, good clause coverage) | 1 h | todo |
+| T3 · Repo scaffold + `.gitignore` + venv + deps | 0.5 h | **done** — Py 3.12 venv, pinned reqs, `c2d6d96` |
+| T4 · Select 30 contracts: 16–65 KB, top-30 by clause coverage, all 41 types asserted → `data/selected_contracts.csv` | 1 h | **done** — `src/select_contracts.py`; #30 coverage = 19, clean cut (16 above + 14 at 19) |
 | T5 · Ingestion: chunk → embed → FAISS index on disk | 2 h | todo |
 | T6 · Query path: question → retrieve top-k → generate | 2 h | todo |
 | T7 · Wire logging — every query writes a complete row | 1 h | todo |
@@ -79,3 +79,5 @@ sanity queries return sensible results.
 | Date | Done | Next |
 |---|---|---|
 | 2026-09-12 | Plan rewritten, project chosen, kickoff brief published, `schema.sql` built and validated, CUAD acquired and analysed | T3 — repo scaffold |
+| 2026-09-29 | T3 done: venv, deps (incl. ollama client), README, `.env.example`, package dirs. Generator locked to local Mistral. T4 selection measured and defined | T4 — `src/select_contracts.py` |
+| 2026-09-30 | T4 done: 30 contracts selected, 41/41 clause types covered, check asserts and blocks the write on failure | T5 — chunk, embed, FAISS index |
