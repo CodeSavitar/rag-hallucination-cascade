@@ -110,6 +110,9 @@ def retrieve(question, contract, k=TOP_K):
         # The exact context the generator will see. The separator keeps chunks visibly apart.
         "retrieved_text": "\n\n---\n\n".join(top_chunks['text']),
         "latency_retrieval_ms": latency_ms,
+        # Runs locally, so $0. Recorded as 0.0, not left NULL: in query_log NULL means
+        # "this step didn't run", and the cost comparison in M5 must include this step.
+        "cost_embedding_usd": 0.0,
     }
 
 
