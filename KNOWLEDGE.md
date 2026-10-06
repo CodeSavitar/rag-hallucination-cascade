@@ -8,7 +8,7 @@ What we have learned while building, as opposed to what we planned. Read this al
 This file holds the **why**, the **data facts**, and the **traps**, so nothing has to be
 rediscovered after a gap.
 
-**Last updated:** 2026-10-06 (after T5)
+**Last updated:** 2026-10-06 (M1 complete)
 
 ---
 
@@ -37,8 +37,8 @@ to grade. The contracts are the test bench, not the product.
 ```
 T4  pick 30 contracts           ← the documents                    (DONE)
 T5  chunk + embed + index them                                     (DONE)
-T6  RAG answers questions       ← produces grounded AND hallucinated answers
-T7  log every answer to SQLite (query_log)
+T6  RAG answers questions       ← produces grounded AND hallucinated answers   (DONE)
+T7  log every answer to SQLite (query_log)                          (DONE)
 M2  ~120 questions from the contracts + L1 heuristics
 M3  LLM judge labels answers, human hand-corrects all of them
 M4  train L2 on those labels
@@ -202,6 +202,7 @@ Built by `src/build_index.py` (~4 min, re-run any time); checked by `src/check_r
 | **Failed rows: how they're stored** | T7. schema.sql says keep failed rows, but several columns are NOT NULL. Convention: fill what's known (config, model names, question), use empty values (`''`, `[]`) for what was never produced, and put the message in `error`. **Every analysis query must filter `WHERE error IS NULL`.** |
 | **`question_id` = hash of contract + question text** | T7. Stable across runs with no lookup table; any wording change gives a new ID (correctly: it's a new question). M2 may pass its own IDs instead. The unique index on (`run_id`, `question_id`) blocks asking the same question twice in one run, but only at insert time, after the pipeline has already run. |
 | **T8: what 10 real answers looked like** | 5 contracts × {governing law, assignment}, checked against CUAD's annotations. Governing law: 5/5 correct. Assignment: 2 clean; 1 "refuse, then guess" (2nd sighting, so it's systematic for this model + prompt, not a one-off); 2 "yes, but only if…" where the contract's rule is "no, except if…": facts grounded, headline backwards. Mistral also often prefixes "The answer is:", so refusal detection must not require the sentence at position 0. |
+| **Cost query must stop at the terminating layer** | T9. schema.sql's first cost query summed every layer's cost for the cascade. In shadow mode every layer runs on every row, so on test data it reported the cascade at $0.0041/question vs $0.004 for judging everything: the cascade looked more expensive than the thing it replaces. Fixed: sum only the layers up to `terminating_layer`; judge-everything uses `shadow_mode = 1` rows only. Self-test in `src/sanity_queries.py` guards it. |
 | **Qwen query prompt** | At T6, questions must be encoded with `prompt_name="query"`; chunks are encoded with no prompt. Forgetting it costs retrieval quality silently. |
 | **`k` and `num_ctx`** | Decide at T6. Check the context length Ollama actually uses for `mistral:latest` (the model supports 32,768, the runtime default is smaller). |
 | Chunk → contract mapping | The index needs a side record of which chunk came from which contract and where, or retrieval results can't be traced back. |

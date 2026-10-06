@@ -188,11 +188,17 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_qlog_run_question ON query_log (run_id, qu
 --   SELECT terminating_layer, COUNT(*) * 1.0 / SUM(COUNT(*)) OVER () AS share
 --   FROM query_log WHERE run_id = ? GROUP BY terminating_layer;
 
--- Cost per query, cascade vs judge-everything:
---   SELECT AVG(COALESCE(cost_embedding_usd,0) + COALESCE(cost_l1_usd,0)
---            + COALESCE(cost_l2_usd,0) + COALESCE(cost_l3_usd,0)) AS cascade_cost,
+-- Cost per query, cascade vs judge-everything (fixed in T9, see src/sanity_queries.py):
+-- the cascade pays only for the layers up to terminating_layer. Summing ALL layers counts
+-- judge calls that shadow mode made but the cascade never would; the first version of this
+-- query made the cascade look MORE expensive than judging everything.
+--   SELECT AVG(COALESCE(cost_embedding_usd,0) + CASE terminating_layer
+--            WHEN 'L1' THEN COALESCE(cost_l1_usd,0)
+--            WHEN 'L2' THEN COALESCE(cost_l1_usd,0) + COALESCE(cost_l2_usd,0)
+--            WHEN 'L3' THEN COALESCE(cost_l1_usd,0) + COALESCE(cost_l2_usd,0) + COALESCE(cost_l3_usd,0)
+--          END) AS cascade_cost,
 --          AVG(COALESCE(cost_embedding_usd,0) + COALESCE(cost_l3_usd,0)) AS judge_every_cost
---   FROM query_log WHERE run_id = ?;
+--   FROM query_log WHERE run_id = ? AND error IS NULL AND shadow_mode = 1;
 
 -- Miss attribution — of the hallucinations we let through, who cleared them:
 --   SELECT terminating_layer, COUNT(*) FROM query_log
