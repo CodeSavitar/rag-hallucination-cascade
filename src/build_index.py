@@ -97,7 +97,7 @@ chunks_df = pd.DataFrame(rows)
 assert chunks_df["filename"].nunique() == len(textfiles_dict), "Some contract produced no chunks"
 assert chunks_df["chunk_id"].is_unique, "Duplicate chunk_id found"
 
-print(f"{len(chunks_df)} chunks from {chunks_df['filename'].nunique()} contracts")
+#print(f"{len(chunks_df)} chunks from {chunks_df['filename'].nunique()} contracts")
 
 
 # Embed every chunk. The first run downloads the model (~1.2 GB) into the Hugging Face cache.
