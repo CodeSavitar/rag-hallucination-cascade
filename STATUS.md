@@ -35,7 +35,7 @@ Tasks are sized to finish inside one sitting. Never stop mid-task — stop betwe
 | T5 · Ingestion: chunk → embed → FAISS index on disk | 2 h | **done** — `src/build_index.py` (1,744 chunks) + `src/check_retrieval.py` (5/5 rank 1) |
 | T6 · Query path: question → retrieve top-k → generate | 2 h | **done** — `src/rag.py` `answer()`; `src/check_rag.py`: plumbing 8/8, 4/5 answerable correct, 3/3 exact refusals |
 | T7 · Wire logging — every query writes a complete row | 1 h | **done** — `src/query_logger.py` → `data/query_log.db`; 23/69 columns filled per row (rest = evaluator layers, labels); failures kept with `error` |
-| T8 · Smoke test: 10 questions, verify no silent NULLs | 0.5 h | todo |
+| T8 · Smoke test: 10 questions, verify no silent NULLs | 0.5 h | **done** — `src/smoke_test.py`: 10 rows over 5 contracts, 0 errors, 0 silent NULLs; governing law 5/5, assignment 2 clean / 3 flawed |
 | T9 · Run the 4 sanity queries at the foot of `schema.sql` | 0.5 h | todo |
 
 **M1 is done when:** one question in → one fully populated `query_log` row out, and the
@@ -66,6 +66,7 @@ sanity queries return sensible results.
 | Question | Needed by | Notes |
 |---|---|---|
 | Judge model + prompt version | M3 | Gemini primary; version the prompt from the first call |
+| Is a grounded-but-misleading answer a hallucination? | M3 | T8 example: the clause says "neither party may assign, except on a merger"; the answer says "yes, either party can assign… but only on a merger". Every fact is in the text, but the headline is backwards. The judge rubric and your labels need one rule for this |
 | Which 41 clause types become natural questions | M2 | Favour contracts with high answerable coverage |
 
 ## Known risks
@@ -87,4 +88,4 @@ sanity queries return sensible results.
 | 2026-09-30 | T4 done: 30 contracts selected, 41/41 clause types covered, check asserts and blocks the write on failure | T5 — chunk, embed, FAISS index |
 | 2026-10-02 | T5 broken into 8 steps; Step 0 decisions locked (Qwen3-Embedding-0.6B, 1000/200 chunks, cosine) | T5 Step 1 — `src/build_index.py` |
 | 2026-10-06 | T5 Steps 1–6 done: 1,744 chunks, 1024-dim float32 vectors, `index/` written and verified on reload. Fixed bfloat16 precision and a torch/faiss import-order segfault. Step 7: `src/check_retrieval.py` passes 5/5 at rank 1 with per-contract search; global search fails | (see next row) |
-| 2026-10-06 (cont.) | T6 done: `src/rag.py` (retrieve → rag-v1 prompt → Mistral, warm-ups, `answer()` returns query_log fields) + `src/check_rag.py`. Prompt rules moved after the question (exact refusals 1/3 → 4/5). Found "refuse, then guess" and a false refusal with the right chunk at #1 | T8 — 10-question smoke test, no silent NULLs |
+| 2026-10-06 (cont.) | T6 done: `src/rag.py` (retrieve → rag-v1 prompt → Mistral, warm-ups, `answer()` returns query_log fields) + `src/check_rag.py`. Prompt rules moved after the question (exact refusals 1/3 → 4/5). Found "refuse, then guess" and a false refusal with the right chunk at #1 | T9 — the 4 sanity queries |
