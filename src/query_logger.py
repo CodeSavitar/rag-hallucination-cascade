@@ -54,7 +54,7 @@ def insert_row(connection, row):
 
 
 def run_and_log(connection, question, contract, run_id, question_id=None, induction_mode=None,
-                gold_chunk_ids=None, k=None, shadow_mode=0):
+                gold_chunk_ids=None, distractor_chunk_ids=None, k=None, shadow_mode=0):
     """Ask one question through the RAG pipeline and save the result as one query_log row.
 
     If the pipeline fails, the row is still written with the error message, as schema.sql
@@ -73,7 +73,13 @@ def run_and_log(connection, question, contract, run_id, question_id=None, induct
     }
 
     try:
-        row.update(rag.answer(question, contract, k))
+        row.update(rag.answer(question, contract, k, induction_mode=induction_mode or 'natural',
+                              gold_chunk_ids=gold_chunk_ids or (),
+                              distractor_chunk_ids=distractor_chunk_ids or ()))
+        # retrieval_hit: did the chunk that BEST holds the answer reach the model?
+        # (gold_chunk_ids[0], see build_seed_set.py). NULL when there is no gold answer.
+        if gold_chunk_ids:
+            row['retrieval_hit'] = int(gold_chunk_ids[0] in row['retrieved_chunk_ids'])
         error = None
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
@@ -90,7 +96,7 @@ def run_and_log(connection, question, contract, run_id, question_id=None, induct
             'retrieved_chunk_ids': [],
             'retrieved_scores': [],
             'retrieved_text': '',
-            'generator_model': rag.GENERATOR_MODEL,
+            'generator_model': rag.WEAK_GENERATOR_MODEL if induction_mode == 'weak_generator' else rag.GENERATOR_MODEL,
             'answer_text': '',
             'error': error,
         })

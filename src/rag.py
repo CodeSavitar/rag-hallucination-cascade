@@ -17,7 +17,10 @@ INDEX_FOLDER_PATH = BASE_DIR / 'index'
 
 # Generation settings, decided 2026-10-06 (see STATUS.md).
 GENERATOR_MODEL = 'mistral:latest'
-TOP_K = 5              # chunks sent to the generator; M2's starved_retrieval mode uses 1
+# weak_generator mode: the SAME model (Mistral 7B v0.3) compressed to 2-bit instead of 4-bit,
+# so any change in hallucination rate comes from model quality alone.
+WEAK_GENERATOR_MODEL = 'mistral:7b-instruct-v0.3-q2_K'
+TOP_K = 5              # chunks sent to the generator
 NUM_CTX = 8192         # Mistral's context window, set explicitly instead of trusting Ollama's default
 TEMPERATURE = 0        # same question -> same answer, so runs are reproducible
 PROMPT_VERSION = 'rag-v1'
@@ -70,43 +73,75 @@ EMBEDDING_MODEL = SentenceTransformer(
 # Doing it here keeps that cost out of the first question's logged latency.
 EMBEDDING_MODEL.encode(["warm-up"], prompt_name="query")
 
-# Same for Mistral: the first call loads 4.4 GB into memory, which takes seconds.
-ollama.chat(model=GENERATOR_MODEL, messages=[{'role': 'user', 'content': 'Reply OK.'}],
-            options=GENERATION_OPTIONS, keep_alive=KEEP_ALIVE)
+# Same for Mistral: the first call loads the model into memory, which takes seconds.
+# The weak model is warmed up the first time it's needed (see generate()), so plain
+# runs don't load a second model they never use.
+WARMED_UP_MODELS = set()
+
+
+def warm_up(model):
+    if model not in WARMED_UP_MODELS:
+        ollama.chat(model=model, messages=[{'role': 'user', 'content': 'Reply OK.'}],
+                    options=GENERATION_OPTIONS, keep_alive=KEEP_ALIVE)
+        WARMED_UP_MODELS.add(model)
+
+
+warm_up(GENERATOR_MODEL)
 
 # Checks that can fail: the three files belong together. A mismatch means the index
 # was half-rebuilt, and every search result would point at the wrong chunk.
 assert INDEX.ntotal == len(CHUNKS_DF) == CONFIG['num_chunks'], "Index, chunk table and config disagree on chunk count"
 assert INDEX.d == CONFIG['dimensions'], "Index dimensions don't match config.json"
 
+# chunk_id -> its row number, which is also its vector's position in the index
+CHUNK_POSITIONS = {chunk_id: position for position, chunk_id in enumerate(CHUNKS_DF['chunk_id'])}
 
-def retrieve(question, contract, k=TOP_K):
+
+def retrieve(question, contract, k=TOP_K, exclude_chunk_ids=(), inject_chunk_ids=()):
     """Find the k chunks of one contract that best match the question.
 
     contract is a filename as it appears in chunks.csv. Returns a dict whose keys are
     query_log column names, so T7 can write it straight to the table.
+
+    The two optional arguments are the sabotage switches for M2's failure modes:
+      exclude_chunk_ids: never return these (starved_retrieval: hide the answer)
+      inject_chunk_ids:  always include these, even from another contract (distractor)
     """
     # Only this contract's chunks are searched (decided 2026-10-06: global search across
     # 30 contracts returns other contracts' clauses).
-    positions = np.where(CHUNKS_DF['filename'] == contract)[0].astype('int64')
-    assert len(positions) > 0, f"Contract not in the index: {contract}"
-    assert k <= len(positions), f"k={k} but the contract only has {len(positions)} chunks"
+    contract_positions = np.where(CHUNKS_DF['filename'] == contract)[0]
+    assert len(contract_positions) > 0, f"Contract not in the index: {contract}"
+    excluded = {CHUNK_POSITIONS[chunk_id] for chunk_id in exclude_chunk_ids}
+    positions = np.array([p for p in contract_positions if p not in excluded], dtype='int64')
+    n_search = k - len(inject_chunk_ids)    # injected chunks take some of the k slots
+    assert n_search <= len(positions), f"k={k} but only {len(positions)} chunks are searchable"
     search_params = faiss.SearchParameters(sel=faiss.IDSelectorBatch(positions))
 
     # Timed from question text to search result, so the cost of embedding the
     # question counts as retrieval time.
     start = time.perf_counter()
     query_vector = EMBEDDING_MODEL.encode([question], prompt_name="query", normalize_embeddings=True)
-    scores, hits = INDEX.search(query_vector, k, params=search_params)
+    scores, hits = INDEX.search(query_vector, n_search, params=search_params)
+    results = list(zip(scores[0].tolist(), hits[0].tolist()))
+
+    # Injected chunks get their REAL similarity to the question (dot product of two length-1
+    # vectors = cosine), then everything is re-sorted by score. A distractor pinned to rank 1
+    # with a fake score would leave a pattern in the logged scores that the evaluator could
+    # learn, instead of learning to spot wrong content.
+    for chunk_id in inject_chunk_ids:
+        position = CHUNK_POSITIONS[chunk_id]
+        score = float(query_vector[0] @ INDEX.reconstruct(position))
+        results.append((score, position))
+    results.sort(key=lambda pair: pair[0], reverse=True)    # best match first
     latency_ms = (time.perf_counter() - start) * 1000
 
-    top_chunks = CHUNKS_DF.iloc[hits[0]]    # best match first
+    top_chunks = CHUNKS_DF.iloc[[position for _, position in results]]
 
     return {
         "embedding_model": CONFIG['embedding_model'],
         "retrieval_k": k,
         "retrieved_chunk_ids": top_chunks['chunk_id'].tolist(),
-        "retrieved_scores": [float(score) for score in scores[0]],    # all k, same order as the ids
+        "retrieved_scores": [float(score) for score, _ in results],    # all k, same order as the ids
         # The exact context the generator will see. The separator keeps chunks visibly apart.
         "retrieved_text": "\n\n---\n\n".join(top_chunks['text']),
         "latency_retrieval_ms": latency_ms,
@@ -125,11 +160,12 @@ def build_prompt(question, context):
     )
 
 
-def generate(prompt):
+def generate(prompt, model=GENERATOR_MODEL):
     """Send one prompt to Mistral. Returns a dict keyed by query_log column names."""
+    warm_up(model)    # before the timer: loading a model is not answering time
     start = time.perf_counter()
     response = ollama.chat(
-        model=GENERATOR_MODEL,
+        model=model,
         messages=[{'role': 'user', 'content': prompt}],
         options=GENERATION_OPTIONS,
         keep_alive=KEEP_ALIVE,
@@ -137,7 +173,7 @@ def generate(prompt):
     latency_ms = (time.perf_counter() - start) * 1000
 
     return {
-        "generator_model": GENERATOR_MODEL,
+        "generator_model": model,
         "generation_params": GENERATION_OPTIONS,
         "prompt_version": PROMPT_VERSION,
         "answer_text": response.message.content.strip(),
@@ -148,18 +184,41 @@ def generate(prompt):
     }
 
 
-def answer(question, contract, k=TOP_K):
+INDUCTION_MODES = {'natural', 'unanswerable', 'starved_retrieval', 'distractor', 'weak_generator'}
+
+
+def answer(question, contract, k=TOP_K, induction_mode='natural',
+           gold_chunk_ids=(), distractor_chunk_ids=()):
     """Run one question through the whole RAG pipeline: retrieve -> prompt -> generate.
+
+    induction_mode picks a deliberate failure (M2, decided 2026-10-07):
+      natural, unanswerable  the normal pipeline (unanswerable questions fail by themselves)
+      starved_retrieval      the answer's chunks are hidden; the next k are sent instead
+      distractor             the answer's chunks are hidden; another contract's version of the
+                             same clause takes one slot
+      weak_generator         normal retrieval, but the 2-bit model writes the answer
 
     Returns one dict keyed by query_log column names, holding everything the RAG side
     knows. The caller (T7) adds the run-level fields: query_id, run_id, question_id,
     induction_mode, gold_chunk_ids, shadow_mode.
     """
+    assert induction_mode in INDUCTION_MODES, f"Unknown induction_mode: {induction_mode}"
+    if induction_mode in ('starved_retrieval', 'distractor'):
+        assert gold_chunk_ids, f"{induction_mode} needs gold_chunk_ids to know what to hide"
+    if induction_mode == 'distractor':
+        assert distractor_chunk_ids, "distractor needs distractor_chunk_ids"
+
     created_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    retrieval = retrieve(question, contract, k)
+    # ALL gold chunks are hidden, including ones that only touch the clause's edge, so no
+    # fragment of the real answer reaches the model.
+    hide = gold_chunk_ids if induction_mode in ('starved_retrieval', 'distractor') else ()
+    plant = distractor_chunk_ids if induction_mode == 'distractor' else ()
+    model = WEAK_GENERATOR_MODEL if induction_mode == 'weak_generator' else GENERATOR_MODEL
+
+    retrieval = retrieve(question, contract, k, exclude_chunk_ids=hide, inject_chunk_ids=plant)
     prompt = build_prompt(question, retrieval["retrieved_text"])
-    generation = generate(prompt)
+    generation = generate(prompt, model)
 
     return {
         "pipeline_config_id": CONFIG['pipeline_config_id'],
