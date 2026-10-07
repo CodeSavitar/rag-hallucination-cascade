@@ -134,13 +134,34 @@ Built by `src/build_index.py` (~4 min, re-run any time); checked by `src/check_r
 
 ---
 
+## 4c. M2 seed set (T10–T11)
+
+Built by `src/build_seed_set.py` from `data/question_templates.csv` → `data/seed_set.csv`.
+Fixed random seed (42): rebuilding gives a byte-identical file.
+
+| Item | Fact |
+|---|---|
+| Candidate pairs (15 clause types × 30 contracts) | 308 answerable, 142 unanswerable (absent clause, 12 types only) |
+| Locating CUAD spans | 522/522 found: 487 exact, 35 by matching the pieces around `<omitted>` with flexible whitespace |
+| Selected | 120 = natural 40, unanswerable 25, starved_retrieval 20, distractor 20, weak_generator 15 |
+| Split | 80 train / 40 test; a third of each mode held out |
+| Spread | 29 of 30 contracts (2–6 questions each), all 15 clause types (3–12 each). No (contract, clause) pair is used twice |
+| Gold chunks | Every chunk overlapping the answer (1–9 per question; 2 is most common), **sorted by answer characters held, most first**. First id = the chunk that best contains the clause |
+| Distractor | The other contract's best gold chunk only. Governing Law excluded: most contracts are Californian, so a distractor would usually agree with the real clause |
+
+**Question design rule:** questions ask *what the clause says*, never *whether it exists*. For a
+missing clause, "Does it have audit rights?" has a correct answer ("no"), so it isn't
+unanswerable. "What are the audit terms?" has none.
+
+---
+
 ## 5. Environment
 
 | Item | Value |
 |---|---|
 | Python | **3.12** (Homebrew) in `.venv/`. The system `python3` is Apple's 3.9.6; don't use it |
 | Key packages | `sentence-transformers` 6.1.0, `faiss-cpu` 1.15.1, `scikit-learn` 1.9.1, `pandas` 3.0.6, `ollama` 0.6.2 (client), `python-dotenv` 1.2.3, `google-generativeai` 0.8.6 |
-| Ollama | Installed via Homebrew; `mistral:latest` (4.4 GB) already pulled |
+| Ollama | Installed via Homebrew (0.34.2). `mistral:latest` = Mistral 7B **v0.3**, Q4_K_M, 4.4 GB (generator). `mistral:7b-instruct-v0.3-q2_K`, 2.7 GB, pulled 2026-10-07 (weak_generator mode: same model, 2-bit) |
 | Secrets | `.env` (gitignored); `.env.example` committed with `GEMINI_API_KEY=` |
 | `requirements.txt` | Full `pip freeze`, pinned. **Re-freeze after every new install** |
 
@@ -192,7 +213,7 @@ Built by `src/build_index.py` (~4 min, re-run any time); checked by `src/check_r
 | **Chunk the raw text** | CUAD clause spans are substrings of the raw `.txt`. M2 finds gold chunks by character offset, so stripping or collapsing whitespace before chunking breaks the mapping. |
 | **Qwen loads in bfloat16 by default** | Found in T5 Step 5: with `normalize_embeddings=True` the vector lengths still ranged 0.998–1.004 and cosine scores went above 1.0. Fix: `model_kwargs={"dtype": torch.float32}` → lengths exactly 1.0. Cost: ~2.3× slower (full build ~4 min on the M5). **T6 must load the query model the same way**, or query and chunk vectors won't be comparable at full precision. |
 | **Import torch before faiss** | Found in T5 Step 6: torch, faiss and sklearn each bundle their own `libomp.dylib`. With `import faiss` before `torch`, loading the model segfaults (exit 139, no Python traceback). Reproduced both orders; torch-first works. Applies to every script that uses both, including T6. |
-| **Retrieval must be scoped to one contract** | Found in T5 Step 7. Global search over all 30 fails both ways: a generic question ("Which state's law governs the agreement?") returns *other* contracts' clauses, since every contract has one; naming the parties gets the right contract but not the right clause, because the party names dominate the embedding and match every chunk of that contract. Searching only the source contract's chunks (`faiss.IDSelectorBatch` on its row positions) put the gold chunk at **rank 1 for 5/5** questions. Schema already has `source_contract_id`. **Decided 2026-10-06: scope to the source contract.** |
+| **Retrieval must be scoped to one contract** | Found in T5 Step 7. Global search over all 30 fails both ways (tested on 3 questions × 2 phrasings): a generic question ("Which state's law governs the agreement?") mostly returns *other* contracts' clauses, since every contract has one (gold in the top 5 for 1 of 3, at rank 2); naming the parties gets the right contract but not the right clause, because the party names dominate the embedding and match every chunk of that contract (gold in the top 5 for 0 of 3). Searching only the source contract's chunks (`faiss.IDSelectorBatch` on its row positions) put the gold chunk at **rank 1 for 5/5** questions. Schema already has `source_contract_id`. **Decided 2026-10-06: scope to the source contract.** |
 | **CUAD spans don't always `find()` in the raw text** | In eDiets, 4 of ~40 annotated spans return -1 on exact search: some contain `<omitted>` where CUAD cut text out, others differ in whitespace. M2's gold-chunk lookup needs a fallback (e.g. match the text before `<omitted>`), not plain `str.find`. |
 | **rag-v1 prompt: rules go last** | T6 Step 3. Rules at the top: Mistral used the exact refusal sentence 1/3 times on unanswerable questions, paraphrasing the rest ("The contract does not provide…"). Rules after the question: 4/5. Answerable questions were unaffected. |
 | **"Refuse, then guess"** | One answer began with the exact refusal sentence and then continued "However… it can be inferred that…". So refusal detection must check whether the answer *starts with* the phrase AND whether anything follows it. A refusal followed by a guess is a hallucination, not a refusal, and good M2/M3 material. Paraphrased refusals also occur, so L1 needs a small pattern list, not only the exact phrase. |

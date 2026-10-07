@@ -8,7 +8,8 @@ from pathlib import Path
 
 # Lets this file import rag.py from the same folder, wherever it's run from.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import rag
+# rag is imported inside run_and_log(), not here: importing it loads both models (~15 s),
+# and scripts that only use the database helpers below shouldn't pay for that.
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SCHEMA_PATH = BASE_DIR / 'schema.sql'
@@ -53,12 +54,15 @@ def insert_row(connection, row):
 
 
 def run_and_log(connection, question, contract, run_id, question_id=None, induction_mode=None,
-                gold_chunk_ids=None, k=rag.TOP_K, shadow_mode=0):
+                gold_chunk_ids=None, k=None, shadow_mode=0):
     """Ask one question through the RAG pipeline and save the result as one query_log row.
 
     If the pipeline fails, the row is still written with the error message, as schema.sql
     asks ("keep the row, don't drop it"), and None is returned instead of the row.
     """
+    import rag    # loads the models on first use only; later calls reuse them
+    k = k or rag.TOP_K
+
     row = {
         'query_id': str(uuid.uuid4()),
         'run_id': run_id,
