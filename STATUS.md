@@ -45,7 +45,7 @@ Tasks are sized to finish inside one sitting. Never stop mid-task — stop betwe
 | T10 · One natural question per clause type (15 types) → `data/question_templates.csv` | 1 h | **done** — approved by Adhith; questions ask for details, not yes/no |
 | T11 · Seed set → `data/seed_set.csv`: contract, clause type, question, mode, gold chunk ids, train/test split | 2 h | **done** — `src/build_seed_set.py`; 120 questions, 29 contracts, 15 types, 80 train / 40 test, reproducible |
 | T12 · Failure modes: starved_retrieval, distractor, weak_generator | 2 h | **done** — `rag.answer(induction_mode=…)`; tested 1 question per mode; `retrieval_hit` now logged |
-| T13 · Run the ~120 into `query_log`; check the share of wrong answers (target 30–40%) | 1 h | todo |
+| T13 · Run the ~120 into `query_log`; check the share of wrong answers (target 30–40%) | 1 h | **done** — run `run-20261007T150409Z-360c`: 120/120 answered, 0 failed, 21.5 min. Rough likely-wrong share (train): 29/80 = 36%. No rebalance |
 | T14 · L1 signals (overlap, similarity, unsupported numbers/dates, hedging, length, refusal) | 2.5 h | todo |
 | T15 · L1 verdict rules → l1 columns (thresholds provisional until M3 labels) | 1.5 h | todo |
 | T16 · **Push to GitHub**. First decide what stays private. Add CUAD attribution to README | 0.5 h | todo |
