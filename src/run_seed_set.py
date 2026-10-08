@@ -1,5 +1,4 @@
 import json
-import re
 import sqlite3
 import sys
 import time
@@ -10,6 +9,7 @@ import pandas as pd
 # Lets this script import from the same folder, wherever it's run from.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import query_logger
+from l1_signals import answer_behaviour    # the refusal sorter lives with the other L1 signals
 
 # T13: run all 120 seed questions through the pipeline as ONE run, then summarise.
 #   python src/run_seed_set.py                 run everything, then summarise
@@ -17,31 +17,6 @@ import query_logger
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SEED_CSV = BASE_DIR / 'data' / 'seed_set.csv'
-
-NOT_FOUND_ANSWER = "The answer is not in the provided contract text."    # same sentence as rag.py
-# Refusals Mistral writes in its own words instead of the fixed sentence (seen in T6 and T8).
-PARAPHRASED_REFUSAL = re.compile(
-    r"\b(does not|doesn't|do not) (specify|mention|provide|state|contain|include|say)\b"
-    r"|\bnot (specified|mentioned|provided|stated|included|found)\b", re.IGNORECASE)
-
-
-# Words that turn a refusal into a guess: "...not in the text. However, it can be inferred..."
-GUESS_MARKERS = re.compile(r"\b(however|but|based on|infer|inferred|appears|likely|suggests|implies)\b", re.IGNORECASE)
-REFUSAL_CORE = NOT_FOUND_ANSWER.rstrip('.').lower()    # matched without the full stop: Mistral sometimes adds words after "text"
-
-
-def answer_behaviour(answer):
-    """Sort an answer by how it behaves. A cheap stand-in until M3's real labels exist."""
-    if REFUSAL_CORE in answer.lower():
-        # Whatever comes after the refusal sentence decides it. "...text regarding the minimum
-        # commitment." just restates the topic: still a clean refusal. A guess marker, or a
-        # long continuation, means it refused and then answered anyway.
-        leftover = answer.lower().split(REFUSAL_CORE, 1)[1]
-        guessed = GUESS_MARKERS.search(leftover) or len(leftover) > 150
-        return 'refused_then_guessed' if guessed else 'clean_refusal'
-    if PARAPHRASED_REFUSAL.search(answer):
-        return 'paraphrased_refusal'
-    return 'answered'
 
 
 def run_all():
