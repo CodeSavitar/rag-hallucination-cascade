@@ -13,9 +13,9 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import query_logger
 
-# L1: cheap checks on each logged answer (T14). Each check becomes one l1_* column, and in
-# M4 the same numbers become the classifier's features. The pass/fail/uncertain verdict
-# built from them is T15; this file only measures.
+# L1: cheap checks on each logged answer (T14), and the pass / fail / uncertain verdict
+# built from them (T15). Each check becomes one l1_* column, and in M4 the same numbers
+# become the classifier's features.
 #
 #   python src/l1_signals.py            score the latest full seed-set run
 #   python src/l1_signals.py RUN_ID     score a specific run (re-running overwrites)
@@ -170,6 +170,46 @@ def min_sentence_similarity(answer, retrieved_chunk_ids):
     return float(best_per_sentence.min())
 
 
+# --- Verdict (T15) -------------------------------------------------------------------------
+# PROVISIONAL cut-offs, set 2026-10-08 from the 80 TRAIN answers only, using a stand-in for
+# labels: "probably good" = natural question, right chunk retrieved, answered (20 rows);
+# "probably bad" = answered although the excerpts couldn't hold the answer (24 rows).
+# Revisit once M3's human labels exist. Never tuned on the 40 test rows.
+#
+# Why L1 never PASSES a real answer: the two groups overlap heavily (good word overlap goes as
+# low as 0.67, bad as high as 0.97). The strictest pass rule that still passed anything good
+# (overlap >= 0.95 and weakest sentence >= 0.45) passed 5 of 20 good answers AND one planted-
+# clause answer, the failure the cascade most needs to catch. A wrongly passed hallucination
+# is the expensive error, so every real answer goes on to L2/L3.
+FAIL_IF_OVERLAP_BELOW = 0.60          # lowest "probably good" value seen: 0.67
+FAIL_IF_WEAKEST_SENTENCE_BELOW = 0.30  # lowest "probably good" value seen: 0.34
+
+
+def l1_verdict(signals):
+    """'fail' on hard evidence, 'pass' only for answers that make no claim, else 'uncertain'."""
+    behaviour = signals['l1_features_json']['answer_behaviour']
+    overlap = signals['l1_token_overlap']
+    weakest = signals['l1_min_sentence_similarity']
+
+    if behaviour == 'refused_then_guessed':
+        return 'fail'                     # said "not in the text", then answered anyway
+    if signals['l1_unsupported_numerics'] > 0:
+        return 'fail'                     # a number the excerpts never mention
+    if behaviour == 'clean_refusal':
+        return 'pass'                     # the fixed refusal sentence: no claim to be wrong about
+    # The overlap rules apply to real answers ONLY. A refusal, fixed or in the model's own
+    # words, shares few words with the excerpts by nature; the first version of these rules
+    # failed 6 correct refusals for "low overlap" (found in T15).
+    if behaviour == 'answered':
+        if overlap is not None and overlap < FAIL_IF_OVERLAP_BELOW:
+            return 'fail'
+        if weakest is not None and weakest < FAIL_IF_WEAKEST_SENTENCE_BELOW:
+            return 'fail'
+    # Paraphrased refusals ("the contract does not specify...") can carry a claim with them,
+    # e.g. "...does not specify a cap, but liability is unlimited", so they're not trusted here.
+    return 'uncertain'
+
+
 # --- All signals for one row ---------------------------------------------------------------
 def compute_signals(answer, context, retrieved_chunk_ids, retrieved_scores):
     """Every L1 signal for one answer, keyed by query_log column name."""
@@ -205,6 +245,7 @@ def compute_signals(answer, context, retrieved_chunk_ids, retrieved_scores):
         },
         'cost_l1_usd': 0.0,    # runs locally: $0, recorded as 0 not NULL (NULL = "didn't run")
     }
+    signals['l1_verdict'] = l1_verdict(signals)
     signals['latency_l1_ms'] = (time.perf_counter() - start) * 1000
     return signals
 

@@ -4,7 +4,7 @@ Single source of truth for where the project actually is. Updated at the end of 
 work session. Read this first when resuming after a gap.
 
 **Last updated:** 2026-10-07
-**Current milestone:** M2 — seed set (~120 Q&A) + L1 heuristics
+**Current milestone:** M2 done → T16 (push to GitHub), then M3 — judge + hand-correction
 **Total est. effort:** ~55 h across M1–M6
 
 ---
@@ -14,7 +14,7 @@ work session. Read this first when resuming after a gap.
 | # | Milestone | Est. | State |
 |---|---|---|---|
 | M1 | Target RAG + logging schema | ~7 h | **done** (2026-10-06) |
-| M2 | Seed set (~120 Q&A) + L1 heuristics | ~10 h | **in progress** |
+| M2 | Seed set (~120 Q&A) + L1 heuristics | ~10 h | **done** (2026-10-08) |
 | M3 | L3 judge + hand-correction + agreement rate | ~12 h | not started |
 | M4 | L2 classifier + calibration + baselines | ~10 h | not started |
 | M5 | Cascade + threshold sweep + dashboard | ~8 h | not started |
@@ -47,7 +47,7 @@ Tasks are sized to finish inside one sitting. Never stop mid-task — stop betwe
 | T12 · Failure modes: starved_retrieval, distractor, weak_generator | 2 h | **done** — `rag.answer(induction_mode=…)`; tested 1 question per mode; `retrieval_hit` now logged |
 | T13 · Run the ~120 into `query_log`; check the share of wrong answers (target 30–40%) | 1 h | **done** — run `run-20261007T150409Z-360c`: 120/120 answered, 0 failed, 21.5 min. Rough likely-wrong share (train): 29/80 = 36%. No rebalance |
 | T14 · L1 signals (overlap, similarity, unsupported numbers/dates, hedging, length, refusal) | 2.5 h | **done** — `src/l1_signals.py`; 120/120 rows scored, no NULLs, 61 ms median per answer, $0 |
-| T15 · L1 verdict rules → l1 columns (thresholds provisional until M3 labels) | 1.5 h | todo |
+| T15 · L1 verdict rules → l1 columns (thresholds provisional until M3 labels) | 1.5 h | **done** — `l1_verdict()` in `src/l1_signals.py`; train: 10 fail, 13 pass, 57 uncertain (L1 settles 29%) |
 | T16 · **Push to GitHub**. First decide what stays private. Add CUAD attribution to README | 0.5 h | todo |
 
 **M2 is done when:** every failure mode is represented in `query_log`, and L1 writes
@@ -88,6 +88,7 @@ sanity queries return sensible results.
 | Question | Needed by | Notes |
 |---|---|---|
 | Judge model + prompt version | M3 | Gemini primary; version the prompt from the first call |
+| Is a false refusal a hallucination? | M3 | L1 passes clean refusals because they make no claim. But 2 train refusals came from natural questions where the answer chunk WAS retrieved. Recommended: not a hallucination (no unsupported claim), but noted as "unhelpful" in `human_label_notes` and counted separately |
 | Is a grounded-but-misleading answer a hallucination? | M3 | T8 example: the clause says "neither party may assign, except on a merger"; the answer says "yes, either party can assign… but only on a merger". Every fact is in the text, but the headline is backwards. The judge rubric and your labels need one rule for this |
 
 ## Known risks
@@ -111,3 +112,4 @@ sanity queries return sensible results.
 | 2026-10-06 | T5 Steps 1–6 done: 1,744 chunks, 1024-dim float32 vectors, `index/` written and verified on reload. Fixed bfloat16 precision and a torch/faiss import-order segfault. Step 7: `src/check_retrieval.py` passes 5/5 at rank 1 with per-contract search; global search: gold in top 5 for 1/3 generic, 0/3 named | (see next row) |
 | 2026-10-06 (cont.) | T6 done: `src/rag.py` (retrieve → rag-v1 prompt → Mistral, warm-ups, `answer()` returns query_log fields) + `src/check_rag.py`. Prompt rules moved after the question (exact refusals 1/3 → 4/5). Found "refuse, then guess" and a false refusal with the right chunk at #1 | (see next row) |
 | 2026-10-06 (cont.) | T7–T9 done → **M1 complete**. `query_logger.py`, `smoke_test.py` (10 rows, 0 silent NULLs), `sanity_queries.py` (self-test passes; cost query fixed) | M2 — plan the seed set and L1 |
+| 2026-10-07 → 10-08 | M2 done: T10 questions, T11 seed set (120, 40 held out), T12 failure modes, T13 full run (36% likely wrong), T14 L1 signals, T15 L1 verdict (settles 29% of train) | T16 — push to GitHub, then M3 |
