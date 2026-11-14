@@ -3,8 +3,8 @@
 Single source of truth for where the project actually is. Updated at the end of every
 work session. Read this first when resuming after a gap.
 
-**Last updated:** 2026-10-07
-**Current milestone:** M2 done → T16 (push to GitHub), then M3 — judge + hand-correction
+**Last updated:** 2026-11-01
+**Current milestone:** M3 — judge + blind hand-labelling + agreement (T16 push deferred)
 **Total est. effort:** ~55 h across M1–M6
 
 ---
@@ -15,7 +15,7 @@ work session. Read this first when resuming after a gap.
 |---|---|---|---|
 | M1 | Target RAG + logging schema | ~7 h | **done** (2026-10-06) |
 | M2 | Seed set (~120 Q&A) + L1 heuristics | ~10 h | **done** (2026-10-08) |
-| M3 | L3 judge + hand-correction + agreement rate | ~12 h | not started |
+| M3 | L3 judge + hand-correction + agreement rate | ~12 h | **in progress** |
 | M4 | L2 classifier + calibration + baselines | ~10 h | not started |
 | M5 | Cascade + threshold sweep + dashboard | ~8 h | not started |
 | M6 | Guardrails + deploy + README | ~8 h | not started |
@@ -47,8 +47,22 @@ Tasks are sized to finish inside one sitting. Never stop mid-task — stop betwe
 | T12 · Failure modes: starved_retrieval, distractor, weak_generator | 2 h | **done** — `rag.answer(induction_mode=…)`; tested 1 question per mode; `retrieval_hit` now logged |
 | T13 · Run the ~120 into `query_log`; check the share of wrong answers (target 30–40%) | 1 h | **done** — run `run-20261007T150409Z-360c`: 120/120 answered, 0 failed, 21.5 min. Rough likely-wrong share (train): 29/80 = 36%. No rebalance |
 | T14 · L1 signals (overlap, similarity, unsupported numbers/dates, hedging, length, refusal) | 2.5 h | **done** — `src/l1_signals.py`; 120/120 rows scored, no NULLs, 61 ms median per answer, $0 |
-| T15 · L1 verdict rules → l1 columns (thresholds provisional until M3 labels) | 1.5 h | **done** — `l1_verdict()` in `src/l1_signals.py`; train: 10 fail, 13 pass, 57 uncertain (L1 settles 29%) |
+| T15 · L1 verdict rules → l1 columns (thresholds provisional until M3 labels) | 1.5 h | **done** — `l1_verdict()` in `src/l1_signals.py`; train: 10 fail, 13 pass, 57 uncertain (L1 settles 29%; 10 / 10 / 60 = 25% after the T19 refusal fix) |
 | T16 · **Push to GitHub**. First decide what stays private. Add CUAD attribution to README | 0.5 h | todo |
+
+## M3 task board
+
+| Task | Est. | State |
+|---|---|---|
+| T17 · Judge setup: Anthropic SDK, key in `.env`, model access check, **spending guard** (`src/budget.py`) | 0.5 h | **done** — Sonnet 5.5 accessible (1M context); guard tested; $0 spent |
+| T18 · Judge prompt `l3-v1` (verdict, unsupported claim quote, reasoning; structured output) → L3 columns + cost + latency | 1.5 h | **done** — `src/judge.py`; tested on 5 train answers (one per rubric rule): $0.0375, ~3 s each, 4 clearly right + 1 debatable |
+| T19 · Run the judge on all 120 (live calls, one at a time) | 0.5 h | **done** — 120/120 judged, 0 failed calls; $0.81 (total spend $0.85); median 2.7 s per answer. Train: 36 fail / 44 pass |
+| T20 · Local Streamlit labelling page; judge verdict NEVER shown (blind) | 1.5 h | **done** — `src/label_app.py`; tested on a DB copy: save, resume, back, save-guard, blindness check |
+| T21 · **Adhith labels 60: all 40 test + 20 stratified train** (cut from 120 on 2026-11-14 to save his time; question 2 optional; L2 trains on judge labels) | ~1.5 h | **done** 2026-11-14 — 60 of 60 (40 test, 20 train); 1 "not sure", 0 unhelpful |
+| T22 · Agreement: raw %, Cohen's κ with bootstrap CI, disagreement breakdown, with and without the "Not sure" rows; headline excludes the 5 calibration rows (see KNOWLEDGE.md) | 1 h | **next** |
+
+**M3 is done when:** 60 human labels exist (all 40 test + 20 train, decided 2026-11-14), and judge-vs-human agreement is reported with a
+confidence interval.
 
 **M2 is done when:** every failure mode is represented in `query_log`, and L1 writes
 pass / fail / uncertain with every sub-score logged.
@@ -82,14 +96,19 @@ sanity queries return sensible results.
 | distractor | Same clause type from a different contract, swapped in for the gold chunk | 2026-10-07 |
 | weak_generator | `mistral:7b-instruct-v0.3-q2_K`: same model as the generator (v0.3), 2-bit instead of 4-bit | 2026-10-07 |
 | Train/test split | 40 of 120 held out now, stratified by mode, stored in `seed_set.csv`; never used to set L1 thresholds or train L2 | 2026-10-07 |
+| **Judge = Claude Sonnet 5.5** (was Gemini) | Adhith's Claude API credit instead of a new Google key. Different family from Mistral (no self-preference). ~$1.70 per full 120-answer run. Live calls, not the batch API, so latency is real | 2026-10-09 |
+| **API budget: $18 total, hard cap $15** | Credit can't be topped up. Every paid call goes through `src/budget.py` (worst-case check before, real cost logged after, ledger `data/api_spend.csv`). $3 kept back for estimation error and the M6 demo | 2026-10-09 |
+| Blind labelling | Adhith labels without seeing the judge's verdict; agreement computed afterwards. Avoids anchoring, which would inflate agreement | 2026-10-09 |
+| Rubric: grounded-but-misleading | **Hallucination** (label 1): the headline claim isn't supported, even if every detail is borrowed | 2026-10-09 |
+| Rubric: false refusal | **Not a hallucination** (label 0), noted "unhelpful" in `human_label_notes`, counted separately | 2026-10-09 |
+| What the judge sees | Question + the exact excerpts sent + answer. Never CUAD's gold clause (production conditions). The human labeller does see the gold clause | 2026-10-09 |
+| Labelling tool | Local Streamlit page, saves straight to `query_log`, batches of 20, progress shown | 2026-10-09 |
+| **Label definition = A: supported by the excerpts** | `human_label` 1 = the answer makes a claim the excerpts don't support; judged against the excerpts the generator saw. A second field, "correct for the real contract? yes / no / can't tell" (from CUAD's clause), goes in `human_label_notes` and is never used for training. Reason: an answer faithful to a planted wrong-contract excerpt is a retrieval error that no excerpt-only layer can see; counting it would make recall measure retrieval, not the evaluator. It becomes a README limitation instead | 2026-10-09 |
 
 ## Decisions still open
 
 | Question | Needed by | Notes |
 |---|---|---|
-| Judge model + prompt version | M3 | Gemini primary; version the prompt from the first call |
-| Is a false refusal a hallucination? | M3 | L1 passes clean refusals because they make no claim. But 2 train refusals came from natural questions where the answer chunk WAS retrieved. Recommended: not a hallucination (no unsupported claim), but noted as "unhelpful" in `human_label_notes` and counted separately |
-| Is a grounded-but-misleading answer a hallucination? | M3 | T8 example: the clause says "neither party may assign, except on a merger"; the answer says "yes, either party can assign… but only on a merger". Every fact is in the text, but the headline is backwards. The judge rubric and your labels need one rule for this |
 
 ## Known risks
 
@@ -113,3 +132,4 @@ sanity queries return sensible results.
 | 2026-10-06 (cont.) | T6 done: `src/rag.py` (retrieve → rag-v1 prompt → Mistral, warm-ups, `answer()` returns query_log fields) + `src/check_rag.py`. Prompt rules moved after the question (exact refusals 1/3 → 4/5). Found "refuse, then guess" and a false refusal with the right chunk at #1 | (see next row) |
 | 2026-10-06 (cont.) | T7–T9 done → **M1 complete**. `query_logger.py`, `smoke_test.py` (10 rows, 0 silent NULLs), `sanity_queries.py` (self-test passes; cost query fixed) | M2 — plan the seed set and L1 |
 | 2026-10-07 → 10-08 | M2 done: T10 questions, T11 seed set (120, 40 held out), T12 failure modes, T13 full run (36% likely wrong), T14 L1 signals, T15 L1 verdict (settles 29% of train) | T16 — push to GitHub, then M3 |
+| 2026-10-09 → 11-01 | T17–T20 done: Claude Sonnet 5.5 judge, $15 spending guard, all 120 judged ($0.85 total), L1 refusal bug fixed, label definition A locked, blind labelling page built. Project paused ~3 weeks (trip, illness). All T16–T20 work still uncommitted | T21 — Adhith labels 120 answers |

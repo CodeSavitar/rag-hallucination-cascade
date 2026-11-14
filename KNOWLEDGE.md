@@ -8,7 +8,24 @@ What we have learned while building, as opposed to what we planned. Read this al
 This file holds the **why**, the **data facts**, and the **traps**, so nothing has to be
 rediscovered after a gap.
 
-**Last updated:** 2026-10-06 (M1 complete)
+**Last updated:** 2026-11-01 (M1–M2 done, M3 paused at T21)
+
+## Resume here (state on 2026-11-01)
+
+| Item | State |
+|---|---|
+| Done | M1, M2, and M3 up to T20: RAG test bench, 120-question seed set, L1, judge run, labelling page |
+| **Next action** | **T22: judge-vs-human agreement.** T21 done 2026-11-14: Adhith labelled 60 answers blind (40 test + 20 train; 1 "not sure", 0 unhelpful). Cut from 120 on 2026-11-14: `src/pick_label_sample.py` writes `data/label_sample.csv` = all 40 TEST answers (human ground truth for the M5 recall curve) + 20 TRAIN answers stratified by mode. Question 2 optional. **L2 now trains on the judge's labels for all 80 train answers** (distillation of L3, as the plan already framed it), not human labels. His first 5 labels were ChatGPT-assisted: backed up to `data/calibration_labels_chatgpt.csv`, the 3 test ones cleared for him to relabel himself; all 5 are excluded from the T22 agreement figure. Then T22 (agreement), then the deferred T16 (GitHub push), then M4 |
+| Start labelling | `.venv/bin/streamlit run src/label_app.py`, then open `http://localhost:8501`. The server does not stay running between sessions; progress is saved per answer |
+| Labelling rules | Adhith may use the general wording guide (`src/label_guide.md`) and the "Not sure" tick. Individual answers are not discussed with any AI during T21, so the labels stay independent of the LLM judge. T22 reports agreement with and without the not-sure rows. **Calibration rows:** on 2026-11-14 Adhith's first 5 labels were reviewed outside the blind process (query_ids starting `88c27239`, `e1e43e17`, `42afd15e`, `b510a476`, `08aec7af`). Those 5 are excluded from the headline agreement, which is reported on the other 115, and all 120 are reported as a secondary number. No more per-answer review after this |
+| Seed run | `run-20261007T150409Z-360c`: 120 answers, with L1 and judge verdicts stored |
+| API spend | $0.85 of the $15 cap ($18 credit, no top-ups). T21 and T22 are free |
+| Git | Last commit `51a21cc` (T15). All T16–T20 work is uncommitted, including `src/judge.py`, `src/budget.py`, `src/label_app.py` and `data/api_spend.csv` |
+| Kept local | Personal notes and planning docs are gitignored and never committed |
+
+**This file overrides the original plan where they differ.** Main changes: the judge is Claude
+Sonnet 5.5 (not Gemini), labels are blind (not judge-first), and a hallucination means "not
+supported by the excerpts".
 
 ---
 
@@ -24,7 +41,7 @@ detection for RAG. It is not a general "judge any LLM output" tool.
 |---|---|---|
 | L1 | Cheap heuristics (e.g. answer/context overlap) | Instant, free, settles the obvious cases |
 | L2 | Trained classifier (XGBoost / logistic regression) | Handles the middle |
-| L3 | LLM judge | Only for what L1 and L2 cannot settle |
+| L3 | LLM judge (Claude Sonnet 5.5) | Only for what L1 and L2 cannot settle |
 
 **Why we build a RAG system at all (the "test bench").** An evaluator needs labelled examples
 of *(question, retrieved context, answer, supported/hallucinated)*. L2 cannot train without
@@ -39,9 +56,9 @@ T4  pick 30 contracts           ← the documents                    (DONE)
 T5  chunk + embed + index them                                     (DONE)
 T6  RAG answers questions       ← produces grounded AND hallucinated answers   (DONE)
 T7  log every answer to SQLite (query_log)                          (DONE)
-M2  ~120 questions from the contracts + L1 heuristics
-M3  LLM judge labels answers, human hand-corrects all of them
-M4  train L2 on those labels
+M2  ~120 questions from the contracts + L1 heuristics               (DONE)
+M3  LLM judge grades answers, human labels all of them blind        (judge DONE, labels NEXT)
+M4  train L2 on the judge's labels (80 train); human labels measure it
 M5  chain L1 → L2 → L3, measure cost vs. recall
 ```
 
@@ -58,7 +75,7 @@ and an invented answer is a hallucination to catch.
 
 | Decision | Reason |
 |---|---|
-| **Generator = local Mistral 7B via Ollama; judge = Gemini** | If the same model family writes *and* grades answers, you get **self-preference bias**: judges favour their own family's text. Keeping them different avoids building a documented flaw in. Also: free to re-run 120 questions many times, and `weak_generator` induction becomes trivial (pull a heavier quantisation, e.g. `mistral:7b-instruct-q2_K`). |
+| **Generator = local Mistral 7B via Ollama; judge from a different family (Gemini originally, Claude Sonnet 5.5 since 2026-10-09)** | If the same model family writes *and* grades answers, you get **self-preference bias**: judges favour their own family's text. Keeping them different avoids building a documented flaw in. Also: free to re-run 120 questions many times, and `weak_generator` induction becomes trivial (pull a heavier quantisation, e.g. `mistral:7b-instruct-q2_K`). |
 | **30 contracts, not 510** | M3 hand-correction is per label. 30 × ~4 questions ≈ 120 is checkable; 510 is not. |
 | **Size band 16–65 KB** | Corpus median is 32.4 KB, so the band is centred on it. Smaller contracts are thin; larger ones are mostly boilerplate and slow for a 7B model. Side effect: the richest contracts (coverage up to 33) are excluded, because they are all > 65 KB. |
 | **Rank by clause coverage, take the top 30** | More annotated clause types means more checkable questions per contract. Simple ranking *also* covers all 41 types collectively, so no separate "collective coverage" optimisation was needed. |
@@ -160,13 +177,15 @@ unanswerable. "What are the audit terms?" has none.
 | Item | Value |
 |---|---|
 | Python | **3.12** (Homebrew) in `.venv/`. The system `python3` is Apple's 3.9.6; don't use it |
-| Key packages | `sentence-transformers` 6.1.0, `faiss-cpu` 1.15.1, `scikit-learn` 1.9.1, `pandas` 3.0.6, `ollama` 0.6.2 (client), `python-dotenv` 1.2.3, `google-generativeai` 0.8.6 |
+| Key packages | `sentence-transformers` 6.1.0, `faiss-cpu` 1.15.1, `scikit-learn` 1.9.1, `pandas` 3.0.6, `ollama` 0.6.2 (client), `python-dotenv` 1.2.3, `anthropic` 1.12.1, `streamlit` 1.65.0 |
 | Ollama | Installed via Homebrew (0.34.2). `mistral:latest` = Mistral 7B **v0.3**, Q4_K_M, 4.4 GB (generator). `mistral:7b-instruct-v0.3-q2_K`, 2.7 GB, pulled 2026-10-07 (weak_generator mode: same model, 2-bit) |
-| Secrets | `.env` (gitignored); `.env.example` committed with `GEMINI_API_KEY=` |
+| Secrets | `.env` (gitignored, never committed) holds `ANTHROPIC_API_KEY`; `.env.example` committed with an empty `ANTHROPIC_API_KEY=` |
 | `requirements.txt` | Full `pip freeze`, pinned. **Re-freeze after every new install** |
 
-**Check before M3:** `google-generativeai` is Google's older Gemini SDK; the current one is
-`google-genai`. Confirm which one to use before writing judge code, and pin it.
+**Judge SDK (M3):** the judge is Claude, via `anthropic` 1.12.1 (pinned). The unused Google SDK
+(`google-generativeai`) was removed. **Load `.env` with an explicit path**
+(`load_dotenv(BASE_DIR / '.env')`): bare `load_dotenv()` crashes when code is piped in from a shell.
+**Budget:** $18 credit, $15 hard cap, enforced by `src/budget.py`; check before every paid call.
 
 ---
 
@@ -203,9 +222,9 @@ unanswerable. "What are the audit terms?" has none.
 
 ---
 
-## 7. Open items and traps going into T6
+## 7. Findings, decisions and traps from T5 onward
 
-(Rows marked *Found in T5* are lessons; they apply to every later script.)
+These are lessons from each task, in order, and they apply to every later script.
 
 | Item | Notes |
 |---|---|
@@ -232,12 +251,18 @@ unanswerable. "What are the audit terms?" has none.
 | **L1 signals (T14)** | `src/l1_signals.py` writes every `l1_*` column except `l1_verdict` (T15), plus `latency_l1_ms`, `cost_l1_usd = 0`. Loads only the embedding model, never Mistral. Weakest sentence = each answer sentence's best cosine to any retrieved chunk (chunk vectors reused from the index), then the minimum. Token counts use Qwen's tokenizer. `l1_features_json` holds answer behaviour and the hedges / numbers found, so every count can be checked by reading. |
 | **Unsupported-number check: two false-alarm sources fixed** | First pass flagged 6 answers; 5 were wrong: 4 **section references** ("Section 7(b)", "Clauses 1 and 10", "(9.9 Heading)") and 1 **number in words** in the contract ("sixty days" vs answer "60 days"). Now section references are stripped from the answer and spelled numbers (one–ninety-nine, incl. "twenty-four") count on both sides. After the fix: 1 flag in 120, and it's real: the weak model cited "the 28th excerpt" when it was given 5. Known gap: "one" in phrases like "one of the parties" counts as the number 1. |
 | **First look: L1 separates the modes only weakly** | TRAIN rows that gave an answer: word overlap 0.89 natural vs 0.76–0.80 for every failure mode; weakest-sentence similarity 0.58 vs 0.51–0.55. **Distractor answers keep high overlap (0.79)**, as the plan predicted: the planted clause shares the vocabulary. These are mode averages, not labels; T15 sets verdicts, M3 says what's actually right. |
-| **L1 verdict (T15)** | `l1_verdict()`: **fail** = refused then guessed, an unsupported number, or (real answers only) overlap < 0.60 / weakest sentence < 0.30; **pass** = clean refusal only; else **uncertain**. Train: 10 fail, 13 pass, 57 uncertain. Cut-offs set from train with a stand-in for labels (good = natural + retrieval hit + answered, n=20; bad = answered with no answer in the excerpts, n=24) and are PROVISIONAL until M3. |
+| **L1 verdict (T15)** | `l1_verdict()`: **fail** = refused then guessed, an unsupported number, or (real answers only) overlap < 0.60 / weakest sentence < 0.30; **pass** = clean refusal only; else **uncertain**. Train after the T19 refusal fix: 10 fail, 10 pass, 60 uncertain (L1 settles 25%). Cut-offs set from train with a stand-in for labels (good = natural + retrieval hit + answered, n=20; bad = answered with no answer in the excerpts, n=24) and are PROVISIONAL until M3. |
 | **Why L1 never passes a real answer** | Good and bad overlap heavily: word overlap 0.67–1.00 good vs 0.54–0.97 bad. The strictest pass rule that passed anything (overlap ≥ 0.95 and weakest sentence ≥ 0.45) let through 5/20 good and 1 planted-clause answer (0.97 overlap). Passing one hallucination to save 5 judge calls is the wrong trade. **L1 can reject on evidence, but cannot approve.** |
 | **Two rule-order bugs caught by reading the fails** | v1 checked low overlap before refusals, so correct refusals (which naturally share few words with the excerpts) were failed: first the fixed sentence, then 6 refusals in Mistral's own words. Now refusals are decided first, and overlap rules apply only to real answers. |
+| **Judge (T18)** | `src/judge.py`: Claude Sonnet 5.5, prompt `l3-v1`, effort `medium`, `max_tokens` 6000, JSON schema via `output_config.format`. Sees question + excerpts actually sent + answer, never the gold clause. **No `fallbacks`** (a refusal could re-route to a pricier model outside the budget guard). Skips rows already judged with the same prompt version, so a re-run never pays twice. Refusal / truncation → `l3_verdict` NULL with the raw response kept. No `temperature` (rejected on this model), so the judge is not guaranteed deterministic. |
+| **Judge test: ~$0.0075 and ~3 s per answer** | 5 train answers cost $0.0375 total (~2,800 tokens in, 100–250 out). Full 120 ≈ $0.90. One debatable verdict: a 90-day *non-renewal* notice accepted as "ending the agreement without cause". **Prompt deliberately not tuned to match Claude's opinion** before the human labels exist; that would contaminate the agreement measurement. |
+| **T19: judge on all 120** | 120/120, 0 failed calls, $0.81 (project total $0.85), median 2.7 s, max 6.2 s. Train: 36 fail / 44 pass (45% fail; the rough T13 estimate was 36%). |
+| **L1 bug found by comparing with the judge** | 3 answers gave a full answer and then appended "The answer is not in the provided contract text if the question…". The sorter called them clean refusals, so L1 passed 2 train answers the judge failed. Fix: the refusal sentence counts only within the first 20 characters. After re-scoring: train L1 fail 10 → judge fail 10/10; L1 pass 10 → judge pass 10/10; 60 uncertain. |
+| **Faithful to the wrong excerpt** | The judge passed 6/13 planted-clause answers: they correctly report the planted clause, which comes from a different contract. Grounded in the excerpts, wrong about the contract. **Decided 2026-10-09 (option A): not a hallucination** — labels are judged against the excerpts; "correct for the real contract?" is recorded separately in the notes and reported as a retrieval limitation. No layer that only sees the excerpts can detect it. |
+| **Labelling page (T20)** | `.venv/bin/streamlit run src/label_app.py`. Selects only question, contract, excerpts, answer and CUAD's gold clause, so no verdict, mode or split can leak (checked by scanning the rendered page). Fixed shuffled order (seed 7), resumes at the first unlabelled answer, no default selection, Save disabled until both questions are answered. Writes `human_label` (1 = not supported), `human_label_notes` JSON `{correct_for_contract, unhelpful, comment}`, `human_labeled_at`. `LABEL_DB_PATH` env var points it at a test copy. |
 | **Qwen query prompt** | At T6, questions must be encoded with `prompt_name="query"`; chunks are encoded with no prompt. Forgetting it costs retrieval quality silently. |
-| **`k` and `num_ctx`** | Decide at T6. Check the context length Ollama actually uses for `mistral:latest` (the model supports 32,768, the runtime default is smaller). |
-| Chunk → contract mapping | The index needs a side record of which chunk came from which contract and where, or retrieval results can't be traced back. |
+| **`k` and `num_ctx`** | Decided at T6: `k=5`, `num_ctx=8192` set explicitly, temperature 0. `ollama ps` confirmed context 8192. |
+| Chunk → contract mapping | Done in T5: `index/chunks.csv`, where row n is vector n, with contract and character offsets. |
 | Index location | `index/` and `*.faiss` are gitignored; the index is regenerated from the corpus, never committed. |
 | Model files | `*.pkl` / `*.joblib` are gitignored. Before shipping, consider `git add -f` on the **final** classifier so the quickstart runs without retraining. |
 | M6 reproducibility | Quickstart must document the CUAD download (the corpus is gitignored). |

@@ -34,9 +34,18 @@ PARAPHRASED_REFUSAL = re.compile(
     r"|\bnot (specified|mentioned|provided|stated|included|found)\b", re.IGNORECASE)
 
 
+MAX_LEAD_IN_BEFORE_REFUSAL = 20    # room for "The answer is: " in front of the refusal sentence
+
+
 def answer_behaviour(answer):
     """clean_refusal / refused_then_guessed / paraphrased_refusal / answered."""
-    if REFUSAL_CORE in answer.lower():
+    refusal_at = answer.lower().find(REFUSAL_CORE)
+    if refusal_at > MAX_LEAD_IN_BEFORE_REFUSAL:
+        # A full answer with the refusal sentence tacked on the END ("...(4) bodily injury.
+        # The answer is not in the provided contract text if the question...") is an answer,
+        # not a refusal. Found after T19: 3 such answers had been passed as "clean refusals".
+        return 'answered'
+    if refusal_at != -1:
         # Whatever comes after the refusal sentence decides it. "...text regarding the minimum
         # commitment." just restates the topic: still a clean refusal. A guess marker, or a
         # long continuation, means it refused and then answered anyway.
