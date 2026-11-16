@@ -59,7 +59,8 @@ Tasks are sized to finish inside one sitting. Never stop mid-task — stop betwe
 | T19 · Run the judge on all 120 (live calls, one at a time) | 0.5 h | **done** — 120/120 judged, 0 failed calls; $0.81 (total spend $0.85); median 2.7 s per answer. Train: 36 fail / 44 pass |
 | T20 · Local Streamlit labelling page; judge verdict NEVER shown (blind) | 1.5 h | **done** — `src/label_app.py`; tested on a DB copy: save, resume, back, save-guard, blindness check |
 | T21 · **Adhith labels 60: all 40 test + 20 stratified train** (cut from 120 on 2026-11-14 to save his time; question 2 optional; L2 trains on judge labels) | ~1.5 h | **done** 2026-11-14 — 60 of 60 (40 test, 20 train); 1 "not sure", 0 unhelpful |
-| T22 · Agreement: raw %, Cohen's κ with bootstrap CI, disagreement breakdown, with and without the "Not sure" rows; headline excludes the 5 calibration rows (see KNOWLEDGE.md) | 1 h | **next** |
+| T22 · Agreement: raw %, Cohen's κ with bootstrap CI, disagreement breakdown, with and without the "Not sure" rows; headline excludes the 5 calibration rows (see KNOWLEDGE.md) | 1 h | **done** 2026-11-14 — 67% raw, κ 0.25 (0.00–0.49) on 57; `reports/judge_agreement.md` |
+| T22b · Settle the 19 disagreements with blind tie-breaker models (ChatGPT, Gemini if needed; `reports/third_judge_blind.md`); report after-review agreement next to the blind figure as an upper bound | ~15 min | **done** 2026-11-16 — ChatGPT sided with the judge 13/19; after review 89% / κ 0.77 (as given), 93% / κ 0.85 (refusal rule applied); judge missed 0 after correction. **M3 done** |
 
 **M3 is done when:** 60 human labels exist (all 40 test + 20 train, decided 2026-11-14), and judge-vs-human agreement is reported with a
 confidence interval.
