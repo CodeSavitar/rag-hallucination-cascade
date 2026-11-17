@@ -72,9 +72,9 @@ Community Cloud** (free).
 |---|---|---|
 | T34 · L0 guardrails `src/l0_guardrails.py`: rule-based prompt-injection / jailbreak checks on the question; tested on hand-written attacks + benign look-alikes, and on the 320 real questions (false alarms) | 1 h | **done** 2026-11-17 — 6 regex rules; `l0_*` columns written for 320. Attacks the rules were written against: 19 of 19; 5 reworded attacks written afterwards: **0 of 5** (kept in the test file as known misses, so the reported figure is 19 of 24); benign look-alikes 0 of 11 flagged; real questions 0 of 320 flagged; ~0.004 ms each |
 | T35 · Export app data to committed CSVs (per-answer table with every layer's output; out-of-fold L2 scores on train) | 1 h | planned |
-| T36 · Public app `app/streamlit_app.py` with its own light requirements: results + slider, answer browser, try-L0 box | 2 h | planned |
+| T36 · Public app `app/streamlit_app.py` with its own light requirements: results + slider, answer browser, try-L0 box | 2 h | **done** 2026-11-17 — `app/streamlit_app.py` + `app/requirements.txt` (4 packages) + `app/data/` from `src/export_app_data.py`. Tested in a clean environment with only those packages: no model libraries load; every view matches the reports; exact-value slider. Found and fixed an L2 latency bug in the router on the way |
 | T37 · Deploy on Streamlit Community Cloud (Adhith signs in and clicks Deploy); check the live URL | 0.5 h | planned |
-| T38 · Full README (problem → results → how → limits → quickstart); remove references to the private plan | 1.5 h | planned |
+| T38 · Full README (problem → results → how → limits → quickstart); remove references to the private plan | 1.5 h | **done** 2026-11-17 — README rewritten; private-plan references removed from code and docs; personal files moved to a gitignored `private/` folder |
 | T39 · Demo video script (Adhith records) | 0.5 h | planned |
 
 **M6 is done when:** a stranger can open the live URL and explore the results, and the README
