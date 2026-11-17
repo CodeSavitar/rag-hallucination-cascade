@@ -21,6 +21,7 @@ DB_PATH = Path(os.environ.get('LABEL_DB_PATH', BASE_DIR / 'data' / 'query_log.db
 SEED_CSV = BASE_DIR / 'data' / 'seed_set.csv'
 GUIDE_PATH = BASE_DIR / 'src' / 'label_guide.md'
 SAMPLE_CSV = BASE_DIR / 'data' / 'label_sample.csv'
+SEED_RUN_ID = 'run-20261007T150409Z-360c'    # same as query_logger.SEED_RUN_ID
 BATCH_SIZE = 20
 SHUFFLE_SEED = 7    # fixed, so the order is the same every time the page opens
 
@@ -29,12 +30,10 @@ st.set_page_config(page_title="Label answers", layout="wide")
 
 @st.cache_data
 def load_rows(sample_version):
-    """The sampled answers of the latest full seed run, in a fixed shuffled order.
+    """The sampled answers of the seed-set run, in a fixed shuffled order.
     sample_version (the sample file's modified time) makes the cache reload when the sample changes."""
     connection = sqlite3.connect(DB_PATH)
-    run_id = connection.execute(
-        "SELECT run_id FROM query_log GROUP BY run_id HAVING COUNT(*) >= 100 "
-        "ORDER BY MAX(created_at) DESC LIMIT 1").fetchone()[0]
+    run_id = SEED_RUN_ID
     # Only the columns the labeller may see are selected: nothing here reveals a verdict or a mode.
     rows = pd.read_sql_query(
         "SELECT query_id, question_id, query_text, source_contract_id, retrieved_text, answer_text "

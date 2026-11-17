@@ -22,9 +22,7 @@ RANDOM_SEED = 42
 CALIBRATION_PREFIXES = ('88c27239', 'e1e43e17', '42afd15e', 'b510a476', '08aec7af')
 
 connection = sqlite3.connect(DB_PATH)
-run_id = connection.execute(
-    "SELECT run_id FROM query_log GROUP BY run_id HAVING COUNT(*) >= 100 "
-    "ORDER BY MAX(created_at) DESC LIMIT 1").fetchone()[0]
+run_id = 'run-20261007T150409Z-360c'    # the seed-set run, as pinned in query_logger.SEED_RUN_ID
 rows = pd.read_sql_query("SELECT query_id, question_id FROM query_log WHERE run_id = ? AND error IS NULL",
                          connection, params=(run_id,))
 connection.close()

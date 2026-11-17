@@ -16,7 +16,8 @@ import query_logger
 # by the excerpts the RAG system actually used, and writes the l3_* columns.
 #
 #   python src/judge.py --sample N    judge N train answers (testing the prompt; costs cents)
-#   python src/judge.py --all         judge every answer in the latest seed run (T19)
+#   python src/judge.py --all         judge every answer in the seed-set run (T19)
+#   python src/judge.py --all RUN     judge every answer in another run (T23: the extra train run)
 #
 # Every call goes through budget.py: refused if its worst case would cross the $15 cap.
 
@@ -193,12 +194,13 @@ if __name__ == '__main__':
     run_id = latest_seed_run()
     if len(sys.argv) == 3 and sys.argv[1] == '--sample':
         query_ids = pick_sample(run_id)[:int(sys.argv[2])]
-    elif len(sys.argv) == 2 and sys.argv[1] == '--all':
+    elif len(sys.argv) in (2, 3) and sys.argv[1] == '--all':
+        run_id = sys.argv[2] if len(sys.argv) == 3 else run_id
         connection = sqlite3.connect(query_logger.DB_PATH)
         query_ids = [row[0] for row in connection.execute(
             "SELECT query_id FROM query_log WHERE run_id = ? AND error IS NULL", (run_id,))]
         connection.close()
     else:
-        sys.exit("Usage: python src/judge.py --sample N   or   python src/judge.py --all")
+        sys.exit("Usage: python src/judge.py --sample N   or   python src/judge.py --all [RUN]")
     print(f"Judging {len(query_ids)} answers from {run_id} with {JUDGE_MODEL} ({PROMPT_VERSION})")
     judge_rows(query_ids)

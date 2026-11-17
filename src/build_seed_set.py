@@ -60,142 +60,149 @@ def locate_span(text, span):
     return positions or None
 
 
-# --- Load inputs -------------------------------------------------------------------------
-templates = pd.read_csv(TEMPLATES_CSV)
-selected = set(pd.read_csv(SELECTED_CSV)['Filename'])
-master = pd.read_csv(MASTER_CSV)
-master['contract'] = master['Filename'].map(lambda name: Path(name).stem + '.txt')
-master = master[master['contract'].isin(selected)]
-chunks = pd.read_csv(CHUNKS_CSV)
-texts = {name: (CONTRACTS_FOLDER / name).read_text(encoding='utf-8') for name in selected}
+def load_candidates():
+    """Every (contract, clause type) pair in the 30 contracts: answerable ones with their gold
+    chunks (best chunk first), and unanswerable ones. Also used by build_extra_train_set.py."""
+    templates = pd.read_csv(TEMPLATES_CSV)
+    selected = set(pd.read_csv(SELECTED_CSV)['Filename'])
+    master = pd.read_csv(MASTER_CSV)
+    master['contract'] = master['Filename'].map(lambda name: Path(name).stem + '.txt')
+    master = master[master['contract'].isin(selected)]
+    chunks = pd.read_csv(CHUNKS_CSV)
+    texts = {name: (CONTRACTS_FOLDER / name).read_text(encoding='utf-8') for name in selected}
 
-# --- Every (contract, clause type) pair: answerable with gold chunks, or unanswerable --------
-answerable, unanswerable = [], []
+    # --- Every (contract, clause type) pair: answerable with gold chunks, or unanswerable --------
+    answerable, unanswerable = [], []
 
-for _, contract_row in master.iterrows():
-    contract = contract_row['contract']
-    contract_chunks = chunks[chunks['filename'] == contract]
+    for _, contract_row in master.iterrows():
+        contract = contract_row['contract']
+        contract_chunks = chunks[chunks['filename'] == contract]
 
-    for clause_type, question in zip(templates['clause_type'], templates['question']):
-        pair = {'contract': contract, 'clause_type': clause_type, 'question': question}
-        cell = contract_row[clause_type]
+        for clause_type, question in zip(templates['clause_type'], templates['question']):
+            pair = {'contract': contract, 'clause_type': clause_type, 'question': question}
+            cell = contract_row[clause_type]
 
-        if cell == '[]':    # CUAD stores "no such clause" as the string "[]"
-            if clause_type not in ALWAYS_PRESENT_TYPES:
-                unanswerable.append({**pair, 'gold_chunk_ids': [], 'gold_spans': []})
-            continue
+            if cell == '[]':    # CUAD stores "no such clause" as the string "[]"
+                if clause_type not in ALWAYS_PRESENT_TYPES:
+                    unanswerable.append({**pair, 'gold_chunk_ids': [], 'gold_spans': []})
+                continue
 
-        spans = ast.literal_eval(cell)    # the cell is a string that looks like a list
-        positions = []
-        for span in spans:
-            located = locate_span(texts[contract], span)
-            assert located is not None, f"Can't locate a span in {contract} [{clause_type}]: {span[:60]!r}"
-            positions += located
+            spans = ast.literal_eval(cell)    # the cell is a string that looks like a list
+            positions = []
+            for span in spans:
+                located = locate_span(texts[contract], span)
+                assert located is not None, f"Can't locate a span in {contract} [{clause_type}]: {span[:60]!r}"
+                positions += located
 
-        # Gold chunks = every chunk that overlaps any part of the answer. Taking all of them
-        # (not just one) matters for starved_retrieval: removing only some would leave part
-        # of the answer in the context.
-        # Sorted by how many answer characters each chunk holds, MOST FIRST: a chunk that only
-        # touches the edge of a clause is still listed, but the first id is always the chunk
-        # that best contains the answer (used as the distractor, and for retrieval hits).
-        def answer_chars_in(chunk):
-            return sum(max(0, min(chunk['end_char'], end) - max(chunk['start_char'], start))
-                       for start, end in positions)
+            # Gold chunks = every chunk that overlaps any part of the answer. Taking all of them
+            # (not just one) matters for starved_retrieval: removing only some would leave part
+            # of the answer in the context.
+            # Sorted by how many answer characters each chunk holds, MOST FIRST: a chunk that only
+            # touches the edge of a clause is still listed, but the first id is always the chunk
+            # that best contains the answer (used as the distractor, and for retrieval hits).
+            def answer_chars_in(chunk):
+                return sum(max(0, min(chunk['end_char'], end) - max(chunk['start_char'], start))
+                           for start, end in positions)
 
-        overlap = contract_chunks.apply(answer_chars_in, axis=1)                      # answer chars per chunk
-        best_first = overlap[overlap > 0].sort_values(ascending=False, kind='stable')   # stable: ties keep document order
-        gold_ids = contract_chunks.loc[best_first.index, 'chunk_id'].tolist()
-        assert gold_ids, f"No chunk overlaps the answer in {contract} [{clause_type}]"
-        answerable.append({**pair, 'gold_chunk_ids': gold_ids, 'gold_spans': spans})
+            overlap = contract_chunks.apply(answer_chars_in, axis=1)                      # answer chars per chunk
+            best_first = overlap[overlap > 0].sort_values(ascending=False, kind='stable')   # stable: ties keep document order
+            gold_ids = contract_chunks.loc[best_first.index, 'chunk_id'].tolist()
+            assert gold_ids, f"No chunk overlaps the answer in {contract} [{clause_type}]"
+            answerable.append({**pair, 'gold_chunk_ids': gold_ids, 'gold_spans': spans})
 
-print(f"Candidates: {len(answerable)} answerable pairs, {len(unanswerable)} unanswerable pairs")
-
-# --- Sample each mode, never reusing a (contract, clause type) pair ------------------------
-rng = random.Random(RANDOM_SEED)
-rng.shuffle(answerable)
-rng.shuffle(unanswerable)
-
-per_contract, per_clause = {}, {}
-seed_rows = []
+    print(f"Candidates: {len(answerable)} answerable pairs, {len(unanswerable)} unanswerable pairs")
+    return answerable, unanswerable, chunks
 
 
-def take(pool, mode, count, extra_check=None):
-    """Move `count` pairs from `pool` into the seed set as `mode`, respecting the caps."""
-    taken = 0
-    for pair in list(pool):
-        if taken == count:
-            break
-        if per_contract.get(pair['contract'], 0) >= MAX_PER_CONTRACT:
-            continue
-        if per_clause.get(pair['clause_type'], 0) >= MAX_PER_CLAUSE_TYPE:
-            continue
-        extra = extra_check(pair) if extra_check else {}
-        if extra is None:    # the check rejected this pair
-            continue
-        pool.remove(pair)    # used once only: the same pair never appears in two modes
-        per_contract[pair['contract']] = per_contract.get(pair['contract'], 0) + 1
-        per_clause[pair['clause_type']] = per_clause.get(pair['clause_type'], 0) + 1
-        seed_rows.append({**pair, 'induction_mode': mode, **extra})
-        taken += 1
-    assert taken == count, f"Only found {taken} of {count} questions for {mode}"
+if __name__ == '__main__':
+    answerable, unanswerable, chunks = load_candidates()
+
+    # --- Sample each mode, never reusing a (contract, clause type) pair ------------------------
+    rng = random.Random(RANDOM_SEED)
+    rng.shuffle(answerable)
+    rng.shuffle(unanswerable)
+
+    per_contract, per_clause = {}, {}
+    seed_rows = []
 
 
-def pick_distractor(pair):
-    """Choose the same clause type from a different contract, with different wording."""
-    if pair['clause_type'] in NO_DISTRACTOR_TYPES:
-        return None
-    options = [other for other in answerable + [row for row in seed_rows if row['gold_chunk_ids']]
-               if other['clause_type'] == pair['clause_type']
-               and other['contract'] != pair['contract']
-               and other['gold_spans'] != pair['gold_spans']]
-    if not options:
-        return None
-    other = rng.choice(sorted(options, key=lambda row: row['contract']))    # sorted: same pick every run
-    # Only the other contract's BEST gold chunk: the one that actually contains its clause.
-    return {'distractor_contract': other['contract'], 'distractor_chunk_ids': other['gold_chunk_ids'][:1]}
+    def take(pool, mode, count, extra_check=None):
+        """Move `count` pairs from `pool` into the seed set as `mode`, respecting the caps."""
+        taken = 0
+        for pair in list(pool):
+            if taken == count:
+                break
+            if per_contract.get(pair['contract'], 0) >= MAX_PER_CONTRACT:
+                continue
+            if per_clause.get(pair['clause_type'], 0) >= MAX_PER_CLAUSE_TYPE:
+                continue
+            extra = extra_check(pair) if extra_check else {}
+            if extra is None:    # the check rejected this pair
+                continue
+            pool.remove(pair)    # used once only: the same pair never appears in two modes
+            per_contract[pair['contract']] = per_contract.get(pair['contract'], 0) + 1
+            per_clause[pair['clause_type']] = per_clause.get(pair['clause_type'], 0) + 1
+            seed_rows.append({**pair, 'induction_mode': mode, **extra})
+            taken += 1
+        assert taken == count, f"Only found {taken} of {count} questions for {mode}"
 
 
-# Hardest-to-fill modes first, so the caps don't starve them.
-take(unanswerable, 'unanswerable', MODE_COUNTS['unanswerable'])
-take(answerable, 'distractor', MODE_COUNTS['distractor'], pick_distractor)
-for mode in ['starved_retrieval', 'weak_generator', 'natural']:
-    take(answerable, mode, MODE_COUNTS[mode])
+    def pick_distractor(pair):
+        """Choose the same clause type from a different contract, with different wording."""
+        if pair['clause_type'] in NO_DISTRACTOR_TYPES:
+            return None
+        options = [other for other in answerable + [row for row in seed_rows if row['gold_chunk_ids']]
+                   if other['clause_type'] == pair['clause_type']
+                   and other['contract'] != pair['contract']
+                   and other['gold_spans'] != pair['gold_spans']]
+        if not options:
+            return None
+        other = rng.choice(sorted(options, key=lambda row: row['contract']))    # sorted: same pick every run
+        # Only the other contract's BEST gold chunk: the one that actually contains its clause.
+        return {'distractor_contract': other['contract'], 'distractor_chunk_ids': other['gold_chunk_ids'][:1]}
 
-# --- Train/test split: a fixed third of each mode is held out ------------------------------
-seed_df = pd.DataFrame(seed_rows)
-seed_df['split'] = 'train'
-for mode, n_test in TEST_COUNTS.items():
-    mode_index = seed_df.index[seed_df['induction_mode'] == mode].tolist()
-    seed_df.loc[rng.sample(mode_index, n_test), 'split'] = 'test'
 
-seed_df['question_id'] = [make_question_id(q, c) for q, c in zip(seed_df['question'], seed_df['contract'])]
-for column in ['distractor_contract']:
-    seed_df[column] = seed_df[column].fillna('')
-seed_df['distractor_chunk_ids'] = seed_df['distractor_chunk_ids'].apply(lambda ids: ids if isinstance(ids, list) else [])
+    # Hardest-to-fill modes first, so the caps don't starve them.
+    take(unanswerable, 'unanswerable', MODE_COUNTS['unanswerable'])
+    take(answerable, 'distractor', MODE_COUNTS['distractor'], pick_distractor)
+    for mode in ['starved_retrieval', 'weak_generator', 'natural']:
+        take(answerable, mode, MODE_COUNTS[mode])
 
-# --- Checks, all before writing ----------------------------------------------------------
-all_chunk_ids = set(chunks['chunk_id'])
-assert len(seed_df) == sum(MODE_COUNTS.values()), "Wrong number of questions"
-assert seed_df['question_id'].is_unique, "Two rows share a question_id"
-for mode, count in MODE_COUNTS.items():
-    assert (seed_df['induction_mode'] == mode).sum() == count, f"Wrong count for {mode}"
-    assert ((seed_df['induction_mode'] == mode) & (seed_df['split'] == 'test')).sum() == TEST_COUNTS[mode]
-for _, row in seed_df.iterrows():
-    if row['induction_mode'] == 'unanswerable':
-        assert row['gold_chunk_ids'] == [], "An unanswerable question has gold chunks"
-    else:
-        assert row['gold_chunk_ids'] and set(row['gold_chunk_ids']) <= all_chunk_ids, "Bad gold chunks"
-    if row['induction_mode'] == 'distractor':
-        assert row['distractor_contract'] and row['distractor_contract'] != row['contract'], "Bad distractor"
-        assert set(row['distractor_chunk_ids']) <= all_chunk_ids, "Distractor chunk not in the index"
+    # --- Train/test split: a fixed third of each mode is held out ------------------------------
+    seed_df = pd.DataFrame(seed_rows)
+    seed_df['split'] = 'train'
+    for mode, n_test in TEST_COUNTS.items():
+        mode_index = seed_df.index[seed_df['induction_mode'] == mode].tolist()
+        seed_df.loc[rng.sample(mode_index, n_test), 'split'] = 'test'
 
-# --- Write -------------------------------------------------------------------------------
-columns = ['question_id', 'split', 'induction_mode', 'contract', 'clause_type', 'question',
-           'gold_chunk_ids', 'gold_spans', 'distractor_contract', 'distractor_chunk_ids']
-for column in ['gold_chunk_ids', 'gold_spans', 'distractor_chunk_ids']:
-    seed_df[column] = seed_df[column].apply(json.dumps)    # lists stored as JSON text, like query_log
-seed_df = seed_df[columns].sort_values(['induction_mode', 'contract', 'clause_type']).reset_index(drop=True)
-seed_df.to_csv(OUTPUT_CSV, index=False)
+    seed_df['question_id'] = [make_question_id(q, c) for q, c in zip(seed_df['question'], seed_df['contract'])]
+    for column in ['distractor_contract']:
+        seed_df[column] = seed_df[column].fillna('')
+    seed_df['distractor_chunk_ids'] = seed_df['distractor_chunk_ids'].apply(lambda ids: ids if isinstance(ids, list) else [])
 
-print(f"Wrote {len(seed_df)} questions to {OUTPUT_CSV.name}\n")
-print(pd.crosstab(seed_df['induction_mode'], seed_df['split'], margins=True).to_string())
+    # --- Checks, all before writing ----------------------------------------------------------
+    all_chunk_ids = set(chunks['chunk_id'])
+    assert len(seed_df) == sum(MODE_COUNTS.values()), "Wrong number of questions"
+    assert seed_df['question_id'].is_unique, "Two rows share a question_id"
+    for mode, count in MODE_COUNTS.items():
+        assert (seed_df['induction_mode'] == mode).sum() == count, f"Wrong count for {mode}"
+        assert ((seed_df['induction_mode'] == mode) & (seed_df['split'] == 'test')).sum() == TEST_COUNTS[mode]
+    for _, row in seed_df.iterrows():
+        if row['induction_mode'] == 'unanswerable':
+            assert row['gold_chunk_ids'] == [], "An unanswerable question has gold chunks"
+        else:
+            assert row['gold_chunk_ids'] and set(row['gold_chunk_ids']) <= all_chunk_ids, "Bad gold chunks"
+        if row['induction_mode'] == 'distractor':
+            assert row['distractor_contract'] and row['distractor_contract'] != row['contract'], "Bad distractor"
+            assert set(row['distractor_chunk_ids']) <= all_chunk_ids, "Distractor chunk not in the index"
+
+    # --- Write -------------------------------------------------------------------------------
+    columns = ['question_id', 'split', 'induction_mode', 'contract', 'clause_type', 'question',
+               'gold_chunk_ids', 'gold_spans', 'distractor_contract', 'distractor_chunk_ids']
+    for column in ['gold_chunk_ids', 'gold_spans', 'distractor_chunk_ids']:
+        seed_df[column] = seed_df[column].apply(json.dumps)    # lists stored as JSON text, like query_log
+    seed_df = seed_df[columns].sort_values(['induction_mode', 'contract', 'clause_type']).reset_index(drop=True)
+    seed_df.to_csv(OUTPUT_CSV, index=False)
+
+    print(f"Wrote {len(seed_df)} questions to {OUTPUT_CSV.name}\n")
+    print(pd.crosstab(seed_df['induction_mode'], seed_df['split'], margins=True).to_string())

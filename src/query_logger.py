@@ -14,6 +14,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 BASE_DIR = Path(__file__).resolve().parent.parent
 SCHEMA_PATH = BASE_DIR / 'schema.sql'
 DB_PATH = BASE_DIR / 'data' / 'query_log.db'    # gitignored (*.db): regenerated, never committed
+# The run that holds the 120 seed-set answers (T13): every label, verdict and report refers to it.
+# Pinned on 2026-11-16, because T23's 200-answer run made "the latest big run" ambiguous.
+SEED_RUN_ID = 'run-20261007T150409Z-360c'
+# T23's 200 extra TRAIN answers (data/extra_train_set.csv), labelled by the judge for L2.
+EXTRA_RUN_ID = 'run-20261117T035058Z-a4e7'
 
 # Columns holding lists or dicts. The schema stores these as JSON text.
 JSON_COLUMNS = {'gold_chunk_ids', 'retrieved_chunk_ids', 'retrieved_scores', 'generation_params',

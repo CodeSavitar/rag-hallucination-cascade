@@ -13,14 +13,16 @@ from l1_signals import answer_behaviour    # the refusal sorter lives with the o
 
 # T13: run all 120 seed questions through the pipeline as ONE run, then summarise.
 #   python src/run_seed_set.py                 run everything, then summarise
+#   python src/run_seed_set.py --extra         run T23's 200 extra train questions as their own run
 #   python src/run_seed_set.py --summary RUN   summarise an earlier run only (no model calls)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 SEED_CSV = BASE_DIR / 'data' / 'seed_set.csv'
+EXTRA_CSV = BASE_DIR / 'data' / 'extra_train_set.csv'
 
 
-def run_all():
-    seed = pd.read_csv(SEED_CSV)
+def run_all(questions_csv=SEED_CSV):
+    seed = pd.read_csv(questions_csv)
     connection = query_logger.connect()
     run_id = query_logger.new_run_id()
     print(f"Run {run_id}: {len(seed)} questions", flush=True)
@@ -45,7 +47,7 @@ def summarise(run_id):
     connection = sqlite3.connect(query_logger.DB_PATH)
     logged = pd.read_sql_query("SELECT * FROM query_log WHERE run_id = ?", connection, params=(run_id,))
     connection.close()
-    seed = pd.read_csv(SEED_CSV)[['question_id', 'split']]
+    seed = pd.concat([pd.read_csv(path)[['question_id', 'split']] for path in (SEED_CSV, EXTRA_CSV) if path.exists()])
     df = logged.merge(seed, on='question_id', how='left')
 
     failed = df['error'].notna().sum()
@@ -79,5 +81,7 @@ def summarise(run_id):
 if __name__ == '__main__':
     if len(sys.argv) == 3 and sys.argv[1] == '--summary':
         summarise(sys.argv[2])
+    elif len(sys.argv) == 2 and sys.argv[1] == '--extra':
+        summarise(run_all(EXTRA_CSV))
     else:
         summarise(run_all())

@@ -279,14 +279,8 @@ def score_run(run_id):
 
 
 def latest_seed_run():
-    """The most recent run with at least 100 rows, i.e. a full seed-set run, not a smoke test."""
-    connection = sqlite3.connect(query_logger.DB_PATH)
-    run = connection.execute(
-        "SELECT run_id FROM query_log GROUP BY run_id HAVING COUNT(*) >= 100 "
-        "ORDER BY MAX(created_at) DESC LIMIT 1").fetchone()
-    connection.close()
-    assert run, "No full seed-set run found"
-    return run[0]
+    """The seed-set run (pinned in query_logger.py; no longer "the most recent big run")."""
+    return query_logger.SEED_RUN_ID
 
 
 if __name__ == '__main__':

@@ -16,7 +16,7 @@ work session. Read this first when resuming after a gap.
 | M1 | Target RAG + logging schema | ~7 h | **done** (2026-10-06) |
 | M2 | Seed set (~120 Q&A) + L1 heuristics | ~10 h | **done** (2026-10-08) |
 | M3 | L3 judge + hand-correction + agreement rate | ~12 h | **in progress** |
-| M4 | L2 classifier + calibration + baselines | ~10 h | not started |
+| M4 | L2 classifier + calibration + baselines | ~10 h | **planned** — T23–T28 below |
 | M5 | Cascade + threshold sweep + dashboard | ~8 h | not started |
 | M6 | Guardrails + deploy + README | ~8 h | not started |
 
@@ -61,6 +61,21 @@ Tasks are sized to finish inside one sitting. Never stop mid-task — stop betwe
 | T21 · **Adhith labels 60: all 40 test + 20 stratified train** (cut from 120 on 2026-11-14 to save his time; question 2 optional; L2 trains on judge labels) | ~1.5 h | **done** 2026-11-14 — 60 of 60 (40 test, 20 train); 1 "not sure", 0 unhelpful |
 | T22 · Agreement: raw %, Cohen's κ with bootstrap CI, disagreement breakdown, with and without the "Not sure" rows; headline excludes the 5 calibration rows (see KNOWLEDGE.md) | 1 h | **done** 2026-11-14 — 67% raw, κ 0.25 (0.00–0.49) on 57; `reports/judge_agreement.md` |
 | T22b · Settle the 19 disagreements with blind tie-breaker models (ChatGPT, Gemini if needed; `reports/third_judge_blind.md`); report after-review agreement next to the blind figure as an upper bound | ~15 min | **done** 2026-11-16 — ChatGPT sided with the judge 13/19; after review 89% / κ 0.77 (as given), 93% / κ 0.85 (refusal rule applied); judge missed 0 after correction. **M3 done** |
+
+## M4 task board (planned 2026-11-16; all 4 decisions approved by Adhith the same day)
+
+| Task | Est. | State |
+|---|---|---|
+| T23 · **More training data (decision 1):** ~200 new TRAIN questions on the same contracts, same mode mix, run through RAG + L1 + judge. Judge labels are the L2 training labels. ~$1.50 of API, ~1 h machine time, none of Adhith's. Test set untouched | 1.5 h | **done** 2026-11-17 — `data/extra_train_set.csv` (200 rows, `src/build_extra_train_set.py`, seed 43) → run `run-20261117T035058Z-a4e7` (pinned as `query_logger.EXTRA_RUN_ID`; seed run pinned as `SEED_RUN_ID`): 200/200 answered, 0 failed, 25 min; L1 25 fail / 18 pass / 157 uncertain; judge 70 fail / 130 pass, $1.43 (total $2.28). **L2 training set: 217 L1-uncertain train answers (79 fail / 138 pass)**, up from 60 |
+| T24 · Reference labels for the 40 TEST answers (decision 2): human label where human and judge agreed, rule-corrected tie-break where they didn't → `data/reference_labels.csv` | 0.5 h | planned |
+| T25 · L2 features (`src/l2_features.py`): the existing L1 sub-scores + answer↔excerpts embedding similarity, refused-then-guessed flag, sentence count. Banned: induction_mode, retrieval_hit, gold chunks, anything from CUAD's answer | 1.5 h | planned |
+| T26 · Baselines: always escalate, L1 only, best single signal (threshold picked on train) | 1 h | planned |
+| T27 · L2 = logistic regression (decision 4), trained only on answers L1 leaves uncertain (decision 3); C picked by cross-validation; Platt calibration; model saved to `models/` | 1.5 h | planned |
+| T28 · Evaluate on test (L1-uncertain rows first, all 40 second): precision, recall, PR-AUC with bootstrap CIs vs the 3 baselines; reliability curve; coefficients → `reports/l2_results.md`; write `l2_*` columns to query_log | 2 h | planned |
+
+**M4 is done when:** L2's precision/recall/PR-AUC on the test set is reported against all three
+baselines with intervals, a reliability curve is plotted, and the coefficients are explained. If L2
+doesn't beat the best single signal, that is written up as the finding.
 
 **M3 is done when:** 60 human labels exist (all 40 test + 20 train, decided 2026-11-14), and judge-vs-human agreement is reported with a
 confidence interval.
