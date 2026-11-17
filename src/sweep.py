@@ -9,7 +9,7 @@ from sklearn.model_selection import cross_val_predict
 # Lets this file import from the same folder, wherever it's run from.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from baselines import TARGET_RECALL, load_train
-from cascade import load_answers, route
+from cascade import curve, fixed_points, load_answers, measure, route
 from l2_features import MODEL_FEATURES
 from train_l2 import FOLDS, build_model
 
@@ -45,35 +45,6 @@ def with_oof_scores(rows):
     is_test = rows['split'] == 'test'
     rows.loc[is_test, 'l2_score'] = rows.loc[is_test, 'l2_probability_calibrated']
     return rows
-
-
-def measure(rows, routed):
-    truth, flagged = rows['truth'].to_numpy(), routed['flagged'].to_numpy()
-    return {
-        'judge_share': float((routed['terminating_layer'] == 'L3').mean()),
-        'recall': float(flagged[truth == 1].mean()),
-        'precision': float(truth[flagged == 1].mean()) if flagged.sum() else np.nan,
-        'cost_per_1000': float(routed['cost_usd'].mean() * 1000),
-        'latency_p50_ms': float(routed['latency_ms'].median()),
-        'latency_p95_ms': float(routed['latency_ms'].quantile(0.95)),
-    }
-
-
-def curve(rows, score_column):
-    """Every threshold the score takes on these rows, plus 'send all' (0) and 'send none' (inf)."""
-    values = rows.loc[rows['l1_verdict'] == 'uncertain', score_column]
-    points = []
-    for threshold in [0.0, *sorted(values.unique()), np.inf]:
-        points.append({'threshold': threshold, **measure(rows, route(rows, score_column, threshold))})
-    return pd.DataFrame(points)
-
-
-def fixed_points(rows):
-    """Judge everything (every verdict is the judge's) and L1 only (uncertain = let through)."""
-    judge = pd.DataFrame({'terminating_layer': 'L3', 'flagged': rows['judge_label'],
-                          'cost_usd': rows['cost_l3_usd'], 'latency_ms': rows['latency_l3_ms']})
-    l1 = route(rows, 'l1_len_ratio', np.inf)
-    return {'Judge everything': measure(rows, judge), 'L1 only': measure(rows, l1)}
 
 
 def pick_operating_point(train_curve):

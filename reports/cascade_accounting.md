@@ -9,8 +9,8 @@ L1 → L2 (threshold 0.293, picked on train in T30) → judge. L2 never blocks o
 | | Cascade | Judge everything |
 |---|---|---|
 | Cost per 1,000 answers | $2.60 | $7.08 |
-| Evaluator latency, median | 0.07 s | 2.65 s |
-| Evaluator latency, 95th percentile | 3.31 s | 3.24 s |
+| Evaluator latency, median | 0.19 s | 2.65 s |
+| Evaluator latency, 95th percentile | 3.50 s | 3.24 s |
 
 **Confusion matrix**
 
@@ -40,8 +40,8 @@ L1 → L2 (threshold 0.293, picked on train in T30) → judge. L2 never blocks o
 | | Cascade | Judge everything |
 |---|---|---|
 | Cost per 1,000 answers | $3.41 | $7.13 |
-| Evaluator latency, median | 0.14 s | 2.77 s |
-| Evaluator latency, 95th percentile | 4.45 s | 5.82 s |
+| Evaluator latency, median | 0.24 s | 2.77 s |
+| Evaluator latency, 95th percentile | 4.75 s | 5.82 s |
 
 **Confusion matrix**
 

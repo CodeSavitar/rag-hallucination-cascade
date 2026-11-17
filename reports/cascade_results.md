@@ -3,7 +3,7 @@
 **Headline (test set, 40 held-out answers):** at the operating point picked on training data, the
 cascade sends **35% of answers to the LLM judge** and catches **92% of hallucinations (11 of 12)**,
 for **$2.60 per 1,000 answers instead of $7.08** to judge every answer (−63%). Median added time
-per answer drops from 2.65 s to 0.07 s.
+per answer drops from 2.65 s to 0.19 s.
 
 The test set is small. 95% intervals: share sent to the judge 20–50%, recall 71–100%. Read the
 headline as "about a third of answers judged, about nine in ten hallucinations caught", not as
@@ -47,8 +47,8 @@ the judge's fails. It was then applied unchanged to the test set, which was used
   passed one.
 - **Most false alarms come from L1's fail rule** (3 of 5 on test, 8 of 8 on train). That rule was
   tuned on 80 answers and over-fires on new data.
-- The 95th-percentile time is the same as judging everything (~3.3 s): answers that do go to the
-  judge still wait for it. The saving is in the typical answer and in cost.
+- The 95th-percentile time is slightly worse than judging everything (3.5 s vs 3.2 s): answers that
+  go to the judge pay for L1 and L2 first. The saving is in the typical answer and in cost.
 
 ## What each layer is worth
 
@@ -85,5 +85,6 @@ independent number.
 python src/cascade.py         # router self-test; marks shadow-mode rows
 python src/sweep.py           # curve + operating point
 python src/cascade_report.py  # accounting at the operating point
-streamlit run src/dashboard.py
+python src/export_app_data.py  # data for the app
+streamlit run app/streamlit_app.py
 ```

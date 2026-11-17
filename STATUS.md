@@ -18,7 +18,7 @@ work session. Read this first when resuming after a gap.
 | M3 | L3 judge + hand-correction + agreement rate | ~12 h | **in progress** |
 | M4 | L2 classifier + calibration + baselines | ~10 h | **done** 2026-11-17 — L2 does not reliably beat answer length (see T27–T28) |
 | M5 | Cascade + threshold sweep + dashboard | ~8 h | **done** 2026-11-17 — test: 35% judged, 92% caught, $2.60 vs $7.08 per 1,000 |
-| M6 | Guardrails + deploy + README | ~8 h | not started |
+| M6 | Guardrails + deploy + README | ~8 h | **in progress** — T34–T39 below |
 
 ---
 
@@ -62,6 +62,24 @@ Tasks are sized to finish inside one sitting. Never stop mid-task — stop betwe
 | T22 · Agreement: raw %, Cohen's κ with bootstrap CI, disagreement breakdown, with and without the "Not sure" rows; headline excludes the 5 calibration rows (see KNOWLEDGE.md) | 1 h | **done** 2026-11-14 — 67% raw, κ 0.25 (0.00–0.49) on 57; `reports/judge_agreement.md` |
 | T22b · Settle the 19 disagreements with blind tie-breaker models (ChatGPT, Gemini if needed; `reports/third_judge_blind.md`); report after-review agreement next to the blind figure as an upper bound | ~15 min | **done** 2026-11-16 — ChatGPT sided with the judge 13/19; after review 89% / κ 0.77 (as given), 93% / κ 0.85 (refusal rule applied); judge missed 0 after correction. **M3 done** |
 
+## M6 task board (planned 2026-11-17)
+
+Decided by Adhith 2026-11-17: the live URL lets a visitor **explore the results** (dashboard,
+answer browser, try the L0 guardrail): no live model or API calls online. Hosted on **Streamlit
+Community Cloud** (free).
+
+| Task | Est. | State |
+|---|---|---|
+| T34 · L0 guardrails `src/l0_guardrails.py`: rule-based prompt-injection / jailbreak checks on the question; tested on hand-written attacks + benign look-alikes, and on the 320 real questions (false alarms) | 1 h | **done** 2026-11-17 — 6 regex rules; `l0_*` columns written for 320. Attacks the rules were written against: 19 of 19; 5 reworded attacks written afterwards: **0 of 5** (kept in the test file as known misses, so the reported figure is 19 of 24); benign look-alikes 0 of 11 flagged; real questions 0 of 320 flagged; ~0.004 ms each |
+| T35 · Export app data to committed CSVs (per-answer table with every layer's output; out-of-fold L2 scores on train) | 1 h | planned |
+| T36 · Public app `app/streamlit_app.py` with its own light requirements: results + slider, answer browser, try-L0 box | 2 h | planned |
+| T37 · Deploy on Streamlit Community Cloud (Adhith signs in and clicks Deploy); check the live URL | 0.5 h | planned |
+| T38 · Full README (problem → results → how → limits → quickstart); remove references to the private plan | 1.5 h | planned |
+| T39 · Demo video script (Adhith records) | 0.5 h | planned |
+
+**M6 is done when:** a stranger can open the live URL and explore the results, and the README
+lets them understand the project in 90 seconds and run it locally.
+
 ## M5 task board (planned 2026-11-17)
 
 **Design decision (2026-11-17):** L2 never blocks an answer on its own. It either clears it
@@ -73,8 +91,8 @@ cost sweep by flagging everything for free. One threshold → one clean curve. L
 |---|---|---|
 | T29 · Cascade router `src/cascade.py`: per answer → terminating layer, verdict, cost, latency; mark the 320 answers shadow_mode = 1 (every layer ran) | 1.5 h | **done** 2026-11-17 — `route(rows, score_column, threshold)`; self-test on 5 hand-made answers (layer, verdict, cost, latency, both extremes); 320 rows marked shadow |
 | T30 · Threshold sweep → cost-vs-recall curve for L2 and for the length signal, plus the judge-everything and L1-only points. Operating point picked on TRAIN (fewest judge calls with ≥ 90% recall), then read on TEST with intervals | 2 h | **done** 2026-11-17 — `src/sweep.py` → `reports/cascade_curve.csv`, `cascade_curve_{train,test}.svg`, `data/operating_point.json`. L2 threshold 0.293 (train: 46% to judge, 91% recall, out-of-fold). **Test: 35% to the judge (20–50%), recall 92% (71–100%), precision 69%, $2.60 per 1,000 vs $7.08 judging everything.** Length signal at its own train point: 45% to the judge, same recall |
-| T31 · Accounting at the operating point: cost per 1,000 answers, latency p50/p95, miss attribution (which layer let each miss through), detection per failure mode | 1.5 h | **done** 2026-11-17 — `src/cascade_report.py` → `reports/cascade_accounting.md`; `terminating_layer` + `cascade_verdict` written for 320. Test: stops L1 30% / L2 35% / judge 35%; evaluator latency median 0.07 s vs 2.65 s judging everything (p95 about equal: escalated answers pay the full judge time); the 1 miss was cleared by L2; 5 false alarms = L1 3 + judge 2. Train: all 10 misses cleared by L2, all 8 false alarms from L1 |
-| T32 · Streamlit dashboard: curve with an operating-point slider, confusion matrix, cost, latency, escalation, per-mode | 2 h | **done** 2026-11-17 — `src/dashboard.py` (`.venv/bin/streamlit run src/dashboard.py`, port 8502); checked in the browser: numbers match T30–T31 on test and train, slider updates, no errors |
+| T31 · Accounting at the operating point: cost per 1,000 answers, latency p50/p95, miss attribution (which layer let each miss through), detection per failure mode | 1.5 h | **done** 2026-11-17 — `src/cascade_report.py` → `reports/cascade_accounting.md`; `terminating_layer` + `cascade_verdict` written for 320. Test: stops L1 30% / L2 35% / judge 35%; evaluator latency median 0.19 s vs 2.65 s judging everything; p95 3.50 s vs 3.24 s (escalated answers pay L1 + L2 + judge). Latency corrected 2026-11-17: the first run left L2's time out; the 1 miss was cleared by L2; 5 false alarms = L1 3 + judge 2. Train: all 10 misses cleared by L2, all 8 false alarms from L1 |
+| T32 · Streamlit dashboard: curve with an operating-point slider, confusion matrix, cost, latency, escalation, per-mode | 2 h | **done** 2026-11-17 — `src/dashboard.py` (`.venv/bin/streamlit run src/dashboard.py`, port 8502); checked in the browser: numbers match T30–T31 on test and train, slider updates, no errors (superseded in T36 by `app/streamlit_app.py`; `src/dashboard.py` removed) |
 | T33 · Write-up: `reports/cascade_results.md`, headline sentence | 1 h | **done** 2026-11-17 — `reports/cascade_results.md`. **M5 done** |
 
 **M5 is done when:** the cost-vs-recall curve exists and the headline ("at 90% recall, the judge

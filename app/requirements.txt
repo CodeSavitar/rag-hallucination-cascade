@@ -1,0 +1,5 @@
+# Only what the public app needs: it reads app/data/ and never loads a model.
+streamlit==1.65.0
+pandas==3.0.6
+numpy==2.5.3
+altair==6.3.0
