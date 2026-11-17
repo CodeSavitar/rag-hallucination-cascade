@@ -1,0 +1,9 @@
+{
+  "signal": "l1_len_ratio",
+  "direction": "higher",
+  "threshold": 0.0292929292929292,
+  "target_recall": 0.9,
+  "train_auc": 0.713,
+  "train_rows": 217,
+  "chosen_on": "train, judge labels, L1-uncertain only"
+}
