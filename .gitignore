@@ -75,3 +75,6 @@ tmp/
 .idea/
 .vscode/
 *.swp
+
+# Personal notes and planning docs: kept locally, never committed
+private/
