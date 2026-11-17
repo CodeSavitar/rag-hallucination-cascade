@@ -17,7 +17,7 @@ work session. Read this first when resuming after a gap.
 | M2 | Seed set (~120 Q&A) + L1 heuristics | ~10 h | **done** (2026-10-08) |
 | M3 | L3 judge + hand-correction + agreement rate | ~12 h | **in progress** |
 | M4 | L2 classifier + calibration + baselines | ~10 h | **done** 2026-11-17 — L2 does not reliably beat answer length (see T27–T28) |
-| M5 | Cascade + threshold sweep + dashboard | ~8 h | not started |
+| M5 | Cascade + threshold sweep + dashboard | ~8 h | **done** 2026-11-17 — test: 35% judged, 92% caught, $2.60 vs $7.08 per 1,000 |
 | M6 | Guardrails + deploy + README | ~8 h | not started |
 
 ---
@@ -61,6 +61,24 @@ Tasks are sized to finish inside one sitting. Never stop mid-task — stop betwe
 | T21 · **Adhith labels 60: all 40 test + 20 stratified train** (cut from 120 on 2026-11-14 to save his time; question 2 optional; L2 trains on judge labels) | ~1.5 h | **done** 2026-11-14 — 60 of 60 (40 test, 20 train); 1 "not sure", 0 unhelpful |
 | T22 · Agreement: raw %, Cohen's κ with bootstrap CI, disagreement breakdown, with and without the "Not sure" rows; headline excludes the 5 calibration rows (see KNOWLEDGE.md) | 1 h | **done** 2026-11-14 — 67% raw, κ 0.25 (0.00–0.49) on 57; `reports/judge_agreement.md` |
 | T22b · Settle the 19 disagreements with blind tie-breaker models (ChatGPT, Gemini if needed; `reports/third_judge_blind.md`); report after-review agreement next to the blind figure as an upper bound | ~15 min | **done** 2026-11-16 — ChatGPT sided with the judge 13/19; after review 89% / κ 0.77 (as given), 93% / κ 0.85 (refusal rule applied); judge missed 0 after correction. **M3 done** |
+
+## M5 task board (planned 2026-11-17)
+
+**Design decision (2026-11-17):** L2 never blocks an answer on its own. It either clears it
+(score below the threshold) or escalates it to the judge. Reason: on test only 46% of L2's flags
+were real, so letting L2 block would reject many good answers, and a two-sided band "wins" a
+cost sweep by flagging everything for free. One threshold → one clean curve. L1 keeps its rules.
+
+| Task | Est. | State |
+|---|---|---|
+| T29 · Cascade router `src/cascade.py`: per answer → terminating layer, verdict, cost, latency; mark the 320 answers shadow_mode = 1 (every layer ran) | 1.5 h | **done** 2026-11-17 — `route(rows, score_column, threshold)`; self-test on 5 hand-made answers (layer, verdict, cost, latency, both extremes); 320 rows marked shadow |
+| T30 · Threshold sweep → cost-vs-recall curve for L2 and for the length signal, plus the judge-everything and L1-only points. Operating point picked on TRAIN (fewest judge calls with ≥ 90% recall), then read on TEST with intervals | 2 h | **done** 2026-11-17 — `src/sweep.py` → `reports/cascade_curve.csv`, `cascade_curve_{train,test}.svg`, `data/operating_point.json`. L2 threshold 0.293 (train: 46% to judge, 91% recall, out-of-fold). **Test: 35% to the judge (20–50%), recall 92% (71–100%), precision 69%, $2.60 per 1,000 vs $7.08 judging everything.** Length signal at its own train point: 45% to the judge, same recall |
+| T31 · Accounting at the operating point: cost per 1,000 answers, latency p50/p95, miss attribution (which layer let each miss through), detection per failure mode | 1.5 h | **done** 2026-11-17 — `src/cascade_report.py` → `reports/cascade_accounting.md`; `terminating_layer` + `cascade_verdict` written for 320. Test: stops L1 30% / L2 35% / judge 35%; evaluator latency median 0.07 s vs 2.65 s judging everything (p95 about equal: escalated answers pay the full judge time); the 1 miss was cleared by L2; 5 false alarms = L1 3 + judge 2. Train: all 10 misses cleared by L2, all 8 false alarms from L1 |
+| T32 · Streamlit dashboard: curve with an operating-point slider, confusion matrix, cost, latency, escalation, per-mode | 2 h | **done** 2026-11-17 — `src/dashboard.py` (`.venv/bin/streamlit run src/dashboard.py`, port 8502); checked in the browser: numbers match T30–T31 on test and train, slider updates, no errors |
+| T33 · Write-up: `reports/cascade_results.md`, headline sentence | 1 h | **done** 2026-11-17 — `reports/cascade_results.md`. **M5 done** |
+
+**M5 is done when:** the cost-vs-recall curve exists and the headline ("at 90% recall, the judge
+sees Y% of answers, costing $Z per 1,000") can be read off it, with intervals.
 
 ## M4 task board (planned 2026-11-16; all 4 decisions approved by Adhith the same day)
 

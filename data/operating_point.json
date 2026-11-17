@@ -1,0 +1,74 @@
+{
+  "target_recall": 0.9,
+  "picked_on": "train (L2 out-of-fold), judge labels",
+  "L2": {
+    "threshold": 0.29275642347278896,
+    "train": {
+      "judge_share": 0.4607142857142857,
+      "recall": 0.9056603773584906,
+      "precision": 0.9230769230769231,
+      "cost_per_1000": 3.412185714285714
+    },
+    "test": {
+      "judge_share": 0.35,
+      "recall": 0.9166666666666666,
+      "precision": 0.6875,
+      "cost_per_1000": 2.5965000000000003,
+      "latency_p50_ms": 73.73314550022769,
+      "latency_p95_ms": 3307.941473199161,
+      "recall_95": [
+        0.7142857142857143,
+        1.0
+      ],
+      "judge_share_95": [
+        0.2,
+        0.5
+      ]
+    }
+  },
+  "Length signal": {
+    "threshold": 0.0331125827814569,
+    "train": {
+      "judge_share": 0.525,
+      "recall": 0.9056603773584906,
+      "precision": 0.9230769230769231,
+      "cost_per_1000": 3.877528571428571
+    },
+    "test": {
+      "judge_share": 0.45,
+      "recall": 0.9166666666666666,
+      "precision": 0.6470588235294118,
+      "cost_per_1000": 3.26655,
+      "latency_p50_ms": 97.898645999976,
+      "latency_p95_ms": 3307.941473199161,
+      "recall_95": [
+        0.7272727272727273,
+        1.0
+      ],
+      "judge_share_95": [
+        0.3,
+        0.6
+      ]
+    }
+  },
+  "Judge everything": {
+    "test": {
+      "judge_share": 1.0,
+      "recall": 1.0,
+      "precision": 0.8,
+      "cost_per_1000": 7.0831,
+      "latency_p50_ms": 2654.442708500028,
+      "latency_p95_ms": 3236.9036068499545
+    }
+  },
+  "L1 only": {
+    "test": {
+      "judge_share": 0.0,
+      "recall": 0.5,
+      "precision": 0.6666666666666666,
+      "cost_per_1000": 0.0,
+      "latency_p50_ms": 62.12952099986069,
+      "latency_p95_ms": 97.52272680020724
+    }
+  }
+}
