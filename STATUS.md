@@ -48,7 +48,7 @@ Tasks are sized to finish inside one sitting. Never stop mid-task — stop betwe
 | T13 · Run the ~120 into `query_log`; check the share of wrong answers (target 30–40%) | 1 h | **done** — run `run-20261007T150409Z-360c`: 120/120 answered, 0 failed, 21.5 min. Rough likely-wrong share (train): 29/80 = 36%. No rebalance |
 | T14 · L1 signals (overlap, similarity, unsupported numbers/dates, hedging, length, refusal) | 2.5 h | **done** — `src/l1_signals.py`; 120/120 rows scored, no NULLs, 61 ms median per answer, $0 |
 | T15 · L1 verdict rules → l1 columns (thresholds provisional until M3 labels) | 1.5 h | **done** — `l1_verdict()` in `src/l1_signals.py`; train: 10 fail, 13 pass, 57 uncertain (L1 settles 29%; 10 / 10 / 60 = 25% after the T19 refusal fix) |
-| T16 · **Push to GitHub**. First decide what stays private. Add CUAD attribution to README | 0.5 h | todo |
+| T16 · **Push to GitHub** | 0.5 h | **done** 2026-11-17 — public at https://github.com/CodeSavitar/rag-hallucination-cascade. Personal notes and planning docs removed from all history and gitignored; they stay local. README credits CUAD (CC BY 4.0). Commit IDs quoted in older notes predate the history rewrite |
 
 ## M3 task board
 
